@@ -30,10 +30,47 @@ model User {
   applications ApplicationSubmission[]
   reviewedSubmissions ApplicationSubmission[] @relation("LastSubmissionReviewer")
   reviewActions ApplicationReview[]
+  reviewedSignupRequests UserSignupRequest[] @relation("SignupReviewer")
   auditLogs    AuditLog[]
 
   @@index([role])
   @@index([scopeId])
+}
+
+model UserSignupRequest {
+  id              Int                  @id @default(autoincrement())
+  requestNo       String               @unique
+  requestedRole   UserRole
+  scopeId         Int
+  status          SignupRequestStatus  @default(PENDING)
+  username        String
+  fullName        String
+  email           String
+  phone           String
+  passwordHash    String
+  addressLine     String               @db.Text
+  state           String               @default("Tamil Nadu")
+  district        String
+  taluk           String
+  village         String
+  pincode         String
+  photoPath       String?
+  idProofType     IdProofType
+  idProofNumber   String?
+  idProofPath     String?
+  reviewReason    String?              @db.Text
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  approvedUserId  Int?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  scope           GeoUnit              @relation(fields: [scopeId], references: [id])
+  reviewedBy      User?                @relation("SignupReviewer", fields: [reviewedById], references: [id])
+
+  @@index([requestedRole])
+  @@index([scopeId])
+  @@index([status])
+  @@index([reviewedById])
 }
 
 model GeoUnit {
@@ -50,6 +87,7 @@ model GeoUnit {
   children      GeoUnit[]               @relation("GeoHierarchy")
   users         User[]
   applications  ApplicationSubmission[]
+  signupRequests UserSignupRequest[]
 
   @@index([type])
   @@index([parentId])
@@ -159,6 +197,20 @@ enum UserRole {
   VILLAGE_ADMIN
   PARTNER
   CITIZEN
+}
+
+enum SignupRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IdProofType {
+  VOTER_ID
+  RATION_CARD
+  AADHAR_CARD
+  PAN_CARD
+  DRIVING_LICENSE
 }
 
 enum GeoUnitType {

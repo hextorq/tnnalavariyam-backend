@@ -74,8 +74,8 @@ function getScopeOptions(req, res) {
     hierarchy: ['STATE', 'DISTRICT', 'TALUK', 'VILLAGE'],
     roleScopes,
     canCreateRoles,
-    rule: 'Every admin sees applications in their assigned scope and all child scopes. Citizens see only their own applications.',
-    creationRule: 'Each role can create only lower hierarchy users inside its assigned scope. Same-level and higher-level user creation is denied.',
+    rule: 'Every admin sees applications and signup requests in their assigned scope and all child scopes. Partners see only their own applications.',
+    creationRule: 'Direct user creation is disabled. Public users submit signup requests for a role and scope; higher hierarchy users approve only lower-level requests inside their assigned scope.',
   })
 }
 

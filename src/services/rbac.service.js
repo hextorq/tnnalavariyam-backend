@@ -28,6 +28,7 @@ function getRoleScopeType(role) {
 function getCreatableRoles(role) {
   if (!isAdminRole(role)) return []
   return Object.entries(roleRank)
+    .filter(([targetRole]) => targetRole !== 'CITIZEN')
     .filter(([, rank]) => rank > roleRank[role])
     .map(([targetRole]) => targetRole)
 }
@@ -55,6 +56,41 @@ function getVisibleSubmissionWhere(user) {
   }
 }
 
+function getVisibleScopeWhere(user) {
+  if (!user) return { id: -1 }
+  if (user.role === 'SUPER_ADMIN') return {}
+  if (!isAdminRole(user.role) || !user.scope) return { id: -1 }
+
+  return {
+    OR: [
+      { id: user.scopeId },
+      { path: { startsWith: `${user.scope.path}${user.scope.id}/` } },
+    ],
+  }
+}
+
+function getVisibleSignupWhere(user) {
+  if (!user) return { id: -1 }
+  if (user.role === 'SUPER_ADMIN') return {}
+  if (!isAdminRole(user.role) || !user.scope) return { id: -1 }
+
+  return {
+    scope: {
+      is: {
+        OR: [
+          { id: user.scopeId },
+          { path: { startsWith: `${user.scope.path}${user.scope.id}/` } },
+        ],
+      },
+    },
+    requestedRole: { in: getCreatableRoles(user.role) },
+  }
+}
+
+async function assertCanApproveSignup(actor, requestedRole, targetScopeId) {
+  return assertCanAssignRole(actor, requestedRole, targetScopeId)
+}
+
 async function assertCanAssignRole(actor, targetRole, targetScopeId) {
   if (!actor || !isAdminRole(actor.role)) return false
   if (roleRank[targetRole] <= roleRank[actor.role]) return false
@@ -75,8 +111,11 @@ function validateRoleScope(role, scopeType) {
 
 module.exports = {
   assertCanAssignRole,
+  assertCanApproveSignup,
   getCreatableRoles,
   getRoleScopeType,
+  getVisibleScopeWhere,
+  getVisibleSignupWhere,
   getVisibleSubmissionWhere,
   isAdminRole,
   requireRole,
