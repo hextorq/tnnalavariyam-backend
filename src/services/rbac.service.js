@@ -1,0 +1,76 @@
+const prisma = require('../config/prisma')
+
+const roleRank = {
+  SUPER_ADMIN: 0,
+  STATE_ADMIN: 1,
+  DISTRICT_ADMIN: 2,
+  TALUK_ADMIN: 3,
+  VILLAGE_ADMIN: 4,
+  CITIZEN: 5,
+}
+
+const roleScopeType = {
+  STATE_ADMIN: 'STATE',
+  DISTRICT_ADMIN: 'DISTRICT',
+  TALUK_ADMIN: 'TALUK',
+  VILLAGE_ADMIN: 'VILLAGE',
+}
+
+function isAdminRole(role) {
+  return role !== 'CITIZEN'
+}
+
+function getRoleScopeType(role) {
+  return roleScopeType[role] || null
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied' })
+    }
+    next()
+  }
+}
+
+function getVisibleSubmissionWhere(user) {
+  if (!user) return { id: -1 }
+  if (user.role === 'SUPER_ADMIN') return {}
+  if (user.role === 'CITIZEN') return { userId: user.id }
+  if (!user.scope) return { id: -1 }
+
+  return {
+    OR: [
+      { geoUnitId: user.scopeId },
+      { geoUnit: { is: { path: { startsWith: `${user.scope.path}${user.scope.id}/` } } } },
+    ],
+  }
+}
+
+async function assertCanAssignRole(actor, targetRole, targetScopeId) {
+  if (!actor || !isAdminRole(actor.role)) return false
+  if (roleRank[targetRole] <= roleRank[actor.role]) return false
+  if (actor.role === 'SUPER_ADMIN') return true
+  if (!targetScopeId || !actor.scope) return false
+
+  const targetScope = await prisma.geoUnit.findUnique({ where: { id: targetScopeId } })
+  if (!targetScope) return false
+
+  return targetScope.id === actor.scopeId || targetScope.path.startsWith(`${actor.scope.path}${actor.scope.id}/`)
+}
+
+function validateRoleScope(role, scopeType) {
+  if (role === 'SUPER_ADMIN') return true
+  if (role === 'CITIZEN') return scopeType === 'VILLAGE'
+  return roleScopeType[role] === scopeType
+}
+
+module.exports = {
+  assertCanAssignRole,
+  getRoleScopeType,
+  getVisibleSubmissionWhere,
+  isAdminRole,
+  requireRole,
+  roleRank,
+  validateRoleScope,
+}

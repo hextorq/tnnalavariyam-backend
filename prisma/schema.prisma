@@ -21,12 +21,37 @@ model User {
   email        String                  @unique
   phone        String?                 @unique
   passwordHash String
-  role         UserRole                @default(USER)
+  role         UserRole                @default(CITIZEN)
+  scopeId      Int?
   isActive     Boolean                 @default(true)
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
+  scope        GeoUnit?                @relation(fields: [scopeId], references: [id])
   applications ApplicationSubmission[]
   auditLogs    AuditLog[]
+
+  @@index([role])
+  @@index([scopeId])
+}
+
+model GeoUnit {
+  id            Int                     @id @default(autoincrement())
+  name          String
+  tamilName     String?
+  type          GeoUnitType
+  code          String?                 @unique
+  parentId      Int?
+  path          String                  @default("/")
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  parent        GeoUnit?                @relation("GeoHierarchy", fields: [parentId], references: [id])
+  children      GeoUnit[]               @relation("GeoHierarchy")
+  users         User[]
+  applications  ApplicationSubmission[]
+
+  @@index([type])
+  @@index([parentId])
+  @@index([path])
 }
 
 model ApplicationForm {
@@ -47,7 +72,12 @@ model ApplicationSubmission {
   applicationNo   String               @unique
   userId          Int
   formId          Int
+  geoUnitId       Int?
   status          ApplicationStatus    @default(DRAFT)
+  paymentStatus   PaymentStatus        @default(PENDING)
+  paymentAmount   Decimal?             @db.Decimal(10, 2)
+  paymentReference String?
+  paymentPaidAt   DateTime?
   applicantData   Json
   paymentData     Json?
   submittedAt     DateTime?
@@ -55,7 +85,13 @@ model ApplicationSubmission {
   updatedAt       DateTime             @updatedAt
   user            User                 @relation(fields: [userId], references: [id])
   form            ApplicationForm      @relation(fields: [formId], references: [id])
+  geoUnit         GeoUnit?             @relation(fields: [geoUnitId], references: [id])
   documents       UploadedDocument[]
+
+  @@index([userId])
+  @@index([formId])
+  @@index([geoUnitId])
+  @@index([status])
 }
 
 model UploadedDocument {
@@ -90,8 +126,19 @@ model AuditLog {
 }
 
 enum UserRole {
-  USER
-  ADMIN
+  SUPER_ADMIN
+  STATE_ADMIN
+  DISTRICT_ADMIN
+  TALUK_ADMIN
+  VILLAGE_ADMIN
+  CITIZEN
+}
+
+enum GeoUnitType {
+  STATE
+  DISTRICT
+  TALUK
+  VILLAGE
 }
 
 enum ApplicationStatus {
@@ -100,4 +147,11 @@ enum ApplicationStatus {
   UNDER_REVIEW
   APPROVED
   REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
 }
