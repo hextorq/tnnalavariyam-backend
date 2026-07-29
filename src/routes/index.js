@@ -2,6 +2,7 @@ const express = require('express')
 const authRoutes = require('./auth.routes')
 const applicationRoutes = require('./application.routes')
 const contactRoutes = require('./contact.routes')
+const healthRoutes = require('./health.routes')
 const hierarchyRoutes = require('./hierarchy.routes')
 
 const router = express.Router()
@@ -9,6 +10,7 @@ const router = express.Router()
 router.use('/auth', authRoutes)
 router.use('/applications', applicationRoutes)
 router.use('/contact', contactRoutes)
+router.use('/health', healthRoutes)
 router.use('/hierarchy', hierarchyRoutes)
 
 module.exports = router

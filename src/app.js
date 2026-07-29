@@ -6,6 +6,7 @@ const helmet = require('helmet')
 const path = require('path')
 const { frontendOrigin, uploadDir } = require('./config/env')
 const routes = require('./routes')
+const { healthCheck } = require('./controllers/health.controller')
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandlers')
 const { requestLogger } = require('./middleware/requestLogger')
 
@@ -18,9 +19,7 @@ app.use(express.urlencoded({ extended: true }))
 app.use(requestLogger)
 app.use('/uploads', express.static(path.resolve(uploadDir)))
 
-app.get('/health', (req, res) => {
-  res.json({ ok: true, service: 'tn-nalavaariyam-api' })
-})
+app.get('/health', healthCheck)
 
 app.use('/api', routes)
 app.use(notFoundHandler)
