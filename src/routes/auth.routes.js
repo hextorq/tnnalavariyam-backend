@@ -7,11 +7,12 @@ const {
   trackSignupRequest,
 } = require('../controllers/auth.controller')
 const { authenticate } = require('../middleware/auth')
+const { uploadSignupFiles } = require('../middleware/upload')
 const { requireRole } = require('../services/rbac.service')
 
 const router = express.Router()
 
-router.post('/register', requestSignup)
+router.post('/register', uploadSignupFiles, requestSignup)
 router.post('/login', login)
 router.get('/signup-requests', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN'), listSignupRequests)
 router.patch('/signup-requests/:id/review', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN'), reviewSignupRequest)

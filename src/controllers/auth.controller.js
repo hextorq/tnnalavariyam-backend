@@ -13,6 +13,7 @@ const signupRequestSchema = z.object({
   username: z.string().min(3),
   email: z.string().email(),
   password: z.string().min(6),
+  confirmPassword: z.string().optional(),
   fullName: z.string().min(2),
   phone: z.string().min(6),
   addressLine: z.string().min(5),
@@ -20,13 +21,19 @@ const signupRequestSchema = z.object({
   district: z.string().min(1),
   taluk: z.string().min(1),
   village: z.string().min(1),
+  districtCode: z.string().min(1),
+  talukCode: z.string().min(1),
+  villageCode: z.string().min(1),
   pincode: z.string().min(4),
   requestedRole: z.enum(['STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'PARTNER']),
-  scopeId: z.number().int().positive(),
-  photoPath: z.string().optional(),
+  scopeId: z.preprocess((value) => value ? Number(value) : undefined, z.number().int().positive().optional()),
+  photoPath: z.string().min(1),
   idProofType: z.enum(['VOTER_ID', 'RATION_CARD', 'AADHAR_CARD', 'PAN_CARD', 'DRIVING_LICENSE']),
   idProofNumber: z.string().optional(),
-  idProofPath: z.string().optional(),
+  idProofPath: z.string().min(1),
+}).refine((data) => !data.confirmPassword || data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
 })
 
 const loginSchema = z.object({
@@ -52,14 +59,34 @@ function splitName(fullName) {
   }
 }
 
+function publicUploadPath(file) {
+  if (!file) return undefined
+  return `/uploads/signup/${file.filename}`
+}
+
+function getRequestedScopeCode(data) {
+  if (data.scopeId) return null
+  if (data.requestedRole === 'STATE_ADMIN') return 'STATE-33'
+  if (data.requestedRole === 'DISTRICT_ADMIN') return `DISTRICT-${data.districtCode}`
+  if (data.requestedRole === 'TALUK_ADMIN') return `TALUK-${data.talukCode}`
+  return `VILLAGE-${data.villageCode}`
+}
+
 async function requestSignup(req, res, next) {
   try {
-    const data = signupRequestSchema.parse(req.body)
+    const files = req.files || {}
+    const data = signupRequestSchema.parse({
+      ...req.body,
+      photoPath: req.body.photoPath || publicUploadPath(files.photo?.[0]),
+      idProofPath: req.body.idProofPath || publicUploadPath(files.idProof?.[0]),
+    })
     if (data.state.toLowerCase() !== 'tamil nadu') {
       return res.status(400).json({ message: 'State must be Tamil Nadu' })
     }
 
-    const scope = await prisma.geoUnit.findUnique({ where: { id: data.scopeId } })
+    const scope = data.scopeId
+      ? await prisma.geoUnit.findUnique({ where: { id: data.scopeId } })
+      : await prisma.geoUnit.findUnique({ where: { code: getRequestedScopeCode(data) } })
     if (!scope) return res.status(400).json({ message: 'Selected hierarchy scope not found' })
     if (!validateRoleScope(data.requestedRole, scope.type)) {
       return res.status(400).json({ message: `${data.requestedRole} cannot be requested for ${scope.type} scope` })
@@ -80,9 +107,9 @@ async function requestSignup(req, res, next) {
 
     const passwordHash = await bcrypt.hash(data.password, 12)
     const requestNo = `TNSU-${Date.now()}`
-    const { password, ...requestData } = data
+    const { password, confirmPassword, districtCode, talukCode, villageCode, scopeId, ...requestData } = data
     const signupRequest = await prisma.userSignupRequest.create({
-      data: { ...requestData, requestNo, passwordHash },
+      data: { ...requestData, requestNo, passwordHash, scopeId: scope.id },
       select: {
         id: true,
         requestNo: true,
