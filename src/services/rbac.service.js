@@ -6,7 +6,8 @@ const roleRank = {
   DISTRICT_ADMIN: 2,
   TALUK_ADMIN: 3,
   VILLAGE_ADMIN: 4,
-  CITIZEN: 5,
+  PARTNER: 5,
+  CITIZEN: 6,
 }
 
 const roleScopeType = {
@@ -17,7 +18,7 @@ const roleScopeType = {
 }
 
 function isAdminRole(role) {
-  return role !== 'CITIZEN'
+  return !['PARTNER', 'CITIZEN'].includes(role)
 }
 
 function getRoleScopeType(role) {
@@ -36,7 +37,7 @@ function requireRole(...roles) {
 function getVisibleSubmissionWhere(user) {
   if (!user) return { id: -1 }
   if (user.role === 'SUPER_ADMIN') return {}
-  if (user.role === 'CITIZEN') return { userId: user.id }
+  if (!isAdminRole(user.role)) return { userId: user.id }
   if (!user.scope) return { id: -1 }
 
   return {
@@ -61,7 +62,7 @@ async function assertCanAssignRole(actor, targetRole, targetScopeId) {
 
 function validateRoleScope(role, scopeType) {
   if (role === 'SUPER_ADMIN') return true
-  if (role === 'CITIZEN') return scopeType === 'VILLAGE'
+  if (['PARTNER', 'CITIZEN'].includes(role)) return scopeType === 'VILLAGE'
   return roleScopeType[role] === scopeType
 }
 

@@ -16,7 +16,7 @@ const registerSchema = z.object({
 })
 
 const createUserSchema = registerSchema.extend({
-  role: z.enum(['STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'CITIZEN']),
+  role: z.enum(['STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'PARTNER', 'CITIZEN']),
 })
 
 const loginSchema = z.object({
@@ -30,7 +30,7 @@ async function register(req, res, next) {
     const { password, ...userData } = data
     const passwordHash = await bcrypt.hash(data.password, 12)
     const user = await prisma.user.create({
-      data: { ...userData, role: 'CITIZEN', passwordHash },
+      data: { ...userData, role: 'PARTNER', passwordHash },
       select: { id: true, username: true, email: true, firstName: true, lastName: true, role: true, scopeId: true },
     })
     res.status(201).json({ user })
@@ -45,7 +45,7 @@ async function createScopedUser(req, res, next) {
     const scope = await prisma.geoUnit.findUnique({ where: { id: data.scopeId } })
     if (!scope) return res.status(400).json({ message: 'Scope not found' })
     if (!validateRoleScope(data.role, scope.type)) {
-      const expectedScope = data.role === 'CITIZEN' ? 'VILLAGE' : data.role.replace('_ADMIN', '')
+      const expectedScope = ['PARTNER', 'CITIZEN'].includes(data.role) ? 'VILLAGE' : data.role.replace('_ADMIN', '')
       return res.status(400).json({ message: `${data.role} must be assigned to a ${expectedScope} scope` })
     }
     if (!(await assertCanAssignRole(req.user, data.role, data.scopeId))) {

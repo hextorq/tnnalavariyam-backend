@@ -63,9 +63,9 @@ async function createGeoUnit(req, res, next) {
 }
 
 function getScopeOptions(req, res) {
-  const roles = ['SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'CITIZEN']
+  const roles = ['SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'PARTNER', 'CITIZEN']
   const roleScopes = Object.fromEntries(
-    roles.map((role) => [role, role === 'CITIZEN' ? 'VILLAGE' : getRoleScopeType(role)]),
+    roles.map((role) => [role, ['PARTNER', 'CITIZEN'].includes(role) ? 'VILLAGE' : getRoleScopeType(role)]),
   )
 
   res.json({

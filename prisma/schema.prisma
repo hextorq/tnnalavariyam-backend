@@ -21,13 +21,15 @@ model User {
   email        String                  @unique
   phone        String?                 @unique
   passwordHash String
-  role         UserRole                @default(CITIZEN)
+  role         UserRole                @default(PARTNER)
   scopeId      Int?
   isActive     Boolean                 @default(true)
   createdAt    DateTime                @default(now())
   updatedAt    DateTime                @updatedAt
   scope        GeoUnit?                @relation(fields: [scopeId], references: [id])
   applications ApplicationSubmission[]
+  reviewedSubmissions ApplicationSubmission[] @relation("LastSubmissionReviewer")
+  reviewActions ApplicationReview[]
   auditLogs    AuditLog[]
 
   @@index([role])
@@ -78,6 +80,10 @@ model ApplicationSubmission {
   paymentAmount   Decimal?             @db.Decimal(10, 2)
   paymentReference String?
   paymentPaidAt   DateTime?
+  currentReviewReason String?         @db.Text
+  lastReviewedById Int?
+  lastReviewedAt  DateTime?
+  revisionCount   Int                  @default(0)
   applicantData   Json
   paymentData     Json?
   submittedAt     DateTime?
@@ -86,12 +92,32 @@ model ApplicationSubmission {
   user            User                 @relation(fields: [userId], references: [id])
   form            ApplicationForm      @relation(fields: [formId], references: [id])
   geoUnit         GeoUnit?             @relation(fields: [geoUnitId], references: [id])
+  lastReviewedBy  User?                @relation("LastSubmissionReviewer", fields: [lastReviewedById], references: [id])
   documents       UploadedDocument[]
+  reviewHistory   ApplicationReview[]
 
   @@index([userId])
   @@index([formId])
   @@index([geoUnitId])
   @@index([status])
+  @@index([lastReviewedById])
+}
+
+model ApplicationReview {
+  id            Int                   @id @default(autoincrement())
+  submissionId  Int
+  actorId       Int?
+  action        ReviewAction
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  reason        String?               @db.Text
+  createdAt     DateTime              @default(now())
+  submission    ApplicationSubmission @relation(fields: [submissionId], references: [id])
+  actor         User?                 @relation(fields: [actorId], references: [id])
+
+  @@index([submissionId])
+  @@index([actorId])
+  @@index([action])
 }
 
 model UploadedDocument {
@@ -131,6 +157,7 @@ enum UserRole {
   DISTRICT_ADMIN
   TALUK_ADMIN
   VILLAGE_ADMIN
+  PARTNER
   CITIZEN
 }
 
@@ -145,6 +172,18 @@ enum ApplicationStatus {
   DRAFT
   SUBMITTED
   UNDER_REVIEW
+  NEEDS_CORRECTION
+  RESUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum ReviewAction {
+  SUBMITTED
+  UPDATED
+  REVIEW_STARTED
+  CORRECTION_REQUESTED
+  RESUBMITTED
   APPROVED
   REJECTED
 }
