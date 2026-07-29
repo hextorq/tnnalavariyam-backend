@@ -1,5 +1,6 @@
 const { z } = require('zod')
 const prisma = require('../config/prisma')
+const tamilNaduHierarchy = require('../data/tamilNaduHierarchy.json')
 const { getCreatableRoles, getRoleScopeType } = require('../services/rbac.service')
 
 const geoUnitSchema = z.object({
@@ -79,4 +80,8 @@ function getScopeOptions(req, res) {
   })
 }
 
-module.exports = { createGeoUnit, getScopeOptions, listGeoUnits }
+function getTamilNaduHierarchy(req, res) {
+  res.json({ state: tamilNaduHierarchy })
+}
+
+module.exports = { createGeoUnit, getScopeOptions, getTamilNaduHierarchy, listGeoUnits }
