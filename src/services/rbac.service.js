@@ -25,6 +25,13 @@ function getRoleScopeType(role) {
   return roleScopeType[role] || null
 }
 
+function getCreatableRoles(role) {
+  if (!isAdminRole(role)) return []
+  return Object.entries(roleRank)
+    .filter(([, rank]) => rank > roleRank[role])
+    .map(([targetRole]) => targetRole)
+}
+
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -68,6 +75,7 @@ function validateRoleScope(role, scopeType) {
 
 module.exports = {
   assertCanAssignRole,
+  getCreatableRoles,
   getRoleScopeType,
   getVisibleSubmissionWhere,
   isAdminRole,

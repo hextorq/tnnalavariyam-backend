@@ -1,6 +1,6 @@
 const { z } = require('zod')
 const prisma = require('../config/prisma')
-const { getRoleScopeType } = require('../services/rbac.service')
+const { getCreatableRoles, getRoleScopeType } = require('../services/rbac.service')
 
 const geoUnitSchema = z.object({
   name: z.string().min(1),
@@ -67,12 +67,15 @@ function getScopeOptions(req, res) {
   const roleScopes = Object.fromEntries(
     roles.map((role) => [role, ['PARTNER', 'CITIZEN'].includes(role) ? 'VILLAGE' : getRoleScopeType(role)]),
   )
+  const canCreateRoles = Object.fromEntries(roles.map((role) => [role, getCreatableRoles(role)]))
 
   res.json({
     roles,
     hierarchy: ['STATE', 'DISTRICT', 'TALUK', 'VILLAGE'],
     roleScopes,
+    canCreateRoles,
     rule: 'Every admin sees applications in their assigned scope and all child scopes. Citizens see only their own applications.',
+    creationRule: 'Each role can create only lower hierarchy users inside its assigned scope. Same-level and higher-level user creation is denied.',
   })
 }
 
