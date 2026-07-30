@@ -87,6 +87,69 @@ function publicUploadPath(file) {
   return `/uploads/signup/${file.filename}`
 }
 
+function getCredentialMatches(source, target) {
+  return ['username', 'email', 'phone'].filter((field) => source[field] && source[field] === target[field])
+}
+
+async function attachRejectedSignupHistory(requests, visibleWhere) {
+  if (!requests.length) return requests
+
+  const usernames = [...new Set(requests.map((request) => request.username).filter(Boolean))]
+  const emails = [...new Set(requests.map((request) => request.email).filter(Boolean))]
+  const phones = [...new Set(requests.map((request) => request.phone).filter(Boolean))]
+
+  const rejectedRequests = await prisma.userSignupRequest.findMany({
+    where: {
+      AND: [
+        visibleWhere,
+        {
+          status: 'REJECTED',
+          OR: [
+            usernames.length ? { username: { in: usernames } } : undefined,
+            emails.length ? { email: { in: emails } } : undefined,
+            phones.length ? { phone: { in: phones } } : undefined,
+          ].filter(Boolean),
+        },
+      ],
+    },
+    orderBy: [{ reviewedAt: 'desc' }, { createdAt: 'desc' }],
+    select: {
+      id: true,
+      requestNo: true,
+      username: true,
+      email: true,
+      phone: true,
+      reviewReason: true,
+      reviewedAt: true,
+      createdAt: true,
+      reviewedBy: { select: { id: true, username: true, role: true } },
+    },
+  })
+
+  return requests.map((request) => {
+    const items = rejectedRequests
+      .filter((item) => item.id !== request.id)
+      .map((item) => ({
+        id: item.id,
+        requestNo: item.requestNo,
+        matchedFields: getCredentialMatches(item, request),
+        reason: item.reviewReason,
+        rejectedAt: item.reviewedAt,
+        requestedAt: item.createdAt,
+        reviewedBy: item.reviewedBy,
+      }))
+      .filter((item) => item.matchedFields.length)
+
+    return {
+      ...request,
+      rejectedHistory: {
+        count: items.length,
+        items,
+      },
+    }
+  })
+}
+
 function getRequestedScopeCode(data) {
   if (data.scopeId) return null
   if (data.requestedRole === 'DISTRICT_ADMIN') return `DISTRICT-${data.districtCode}`
@@ -243,15 +306,17 @@ async function requestSignup(req, res, next) {
 
 async function listSignupRequests(req, res, next) {
   try {
+    const visibleWhere = getVisibleSignupWhere(req.user)
     const requests = await prisma.userSignupRequest.findMany({
-      where: getVisibleSignupWhere(req.user),
+      where: visibleWhere,
       orderBy: { createdAt: 'desc' },
       include: {
         scope: true,
         reviewedBy: { select: { id: true, username: true, role: true } },
       },
     })
-    res.json({ requests })
+    const requestsWithHistory = await attachRejectedSignupHistory(requests, visibleWhere)
+    res.json({ requests: requestsWithHistory })
   } catch (error) {
     next(error)
   }
