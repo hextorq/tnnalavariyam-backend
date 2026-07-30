@@ -13,10 +13,10 @@ const { requestContext } = require('./services/requestContext')
 
 const app = express()
 
-app.use(helmet())
-app.use(cors({ origin: frontendOrigin, credentials: true }))
 app.use(requestContext)
 app.use(requestLogger)
+app.use(helmet())
+app.use(cors({ origin: frontendOrigin, credentials: true }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use('/uploads', express.static(path.resolve(uploadDir)))
