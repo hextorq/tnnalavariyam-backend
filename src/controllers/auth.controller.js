@@ -407,12 +407,13 @@ async function reviewSignupRequest(req, res, next) {
         passwordHash: signupRequest.passwordHash,
         role: signupRequest.requestedRole,
         scopeId: signupRequest.scopeId,
+        photoPath: signupRequest.photoPath,
         isActive: true,
         name: signupRequest.fullName,
         firstName: name.firstName,
         lastName: name.lastName,
       },
-      select: { id: true, username: true, email: true, phone: true, role: true, scopeId: true },
+      select: { id: true, username: true, email: true, phone: true, role: true, scopeId: true, photoPath: true },
     })
 
     const approved = await prisma.userSignupRequest.update({
@@ -488,10 +489,25 @@ async function login(req, res, next) {
       }),
     ])
 
+    let photoPath = user.photoPath
+    if (!photoPath) {
+      const signupReq = await prisma.userSignupRequest.findFirst({
+        where: {
+          OR: [
+            { approvedUserId: user.id },
+            { username: user.username },
+            { email: user.email },
+          ],
+        },
+        select: { photoPath: true },
+      })
+      if (signupReq?.photoPath) photoPath = signupReq.photoPath
+    }
+
     const token = jwt.sign({ sub: user.id, role: user.role, scopeId: user.scopeId }, jwtSecret, { expiresIn: '7d' })
     res.json({
       token,
-      user: { id: user.id, username: user.username, email: user.email, role: user.role, scopeId: user.scopeId },
+      user: { id: user.id, username: user.username, email: user.email, role: user.role, scopeId: user.scopeId, photoPath },
     })
   } catch (error) {
     next(error)
