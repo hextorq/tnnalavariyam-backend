@@ -13,6 +13,10 @@ const { requestContext } = require('./services/requestContext')
 
 const app = express()
 
+app.use((req, res, next) => {
+  res.setHeader('Timing-Allow-Origin', frontendOrigin)
+  next()
+})
 app.use(requestContext)
 app.use(requestLogger)
 app.use(helmet())

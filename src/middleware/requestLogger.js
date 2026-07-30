@@ -60,6 +60,14 @@ function requestLogger(req, res, next) {
     res.setHeader('X-DB-Time-Ms', String(timings.dbTimeMs))
     res.setHeader('X-DB-Round-Trip-Time-Ms', String(timings.dbRoundTripTimeMs))
     res.setHeader('X-DB-Query-Count', String(timings.dbQueryCount))
+    res.setHeader(
+      'Server-Timing',
+      [
+        `app;dur=${timings.serverProcessingTimeMs};desc="Backend processing"`,
+        `db;dur=${timings.dbRoundTripTimeMs};desc="Database round trip"`,
+        `non-db;dur=${timings.nonDbTimeMs};desc="Backend non database"`,
+      ].join(', '),
+    )
   }
 
   res.json = (body) => {
