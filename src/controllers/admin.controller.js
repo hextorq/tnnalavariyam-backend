@@ -54,9 +54,9 @@ async function getAdminOverview(req, res, next) {
       prisma.userSignupRequest.groupBy({ by: ['status'], where: signupWhere, _count: { _all: true } }),
       prisma.applicationSubmission.groupBy({ by: ['status'], where: submissionWhere, _count: { _all: true } }),
       prisma.user.findMany({
-        where: userWhere,
-        orderBy: { createdAt: 'desc' },
-        take: 10,
+        where: { AND: [userWhere, { isActive: true }] },
+        orderBy: [{ lastLoginAt: 'desc' }, { createdAt: 'desc' }],
+        take: 50,
         select: {
           id: true,
           username: true,
