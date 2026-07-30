@@ -1,3 +1,5 @@
+require('dotenv').config()
+
 const prisma = require('../config/prisma')
 const tamilNaduHierarchy = require('../data/tamilNaduHierarchy.json')
 
