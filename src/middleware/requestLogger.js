@@ -32,26 +32,52 @@ function parseBody(body) {
 
 function requestLogger(req, res, next) {
   const startedAt = Date.now()
+  const { getRequestMetrics } = require('../services/requestContext')
   const originalJson = res.json.bind(res)
   const originalSend = res.send.bind(res)
   let responseBody
 
+  function getTimings() {
+    const dbMetrics = getRequestMetrics()
+    return {
+      responseTimeMs: Date.now() - startedAt,
+      dbTimeMs: dbMetrics.dbTimeMs,
+      dbQueryCount: dbMetrics.dbQueryCount,
+    }
+  }
+
+  function setTimingHeaders(timings) {
+    if (res.headersSent) return
+    res.setHeader('X-Response-Time-Ms', String(timings.responseTimeMs))
+    res.setHeader('X-DB-Time-Ms', String(timings.dbTimeMs))
+    res.setHeader('X-DB-Query-Count', String(timings.dbQueryCount))
+  }
+
   res.json = (body) => {
-    responseBody = body
-    return originalJson(body)
+    const timings = getTimings()
+    setTimingHeaders(timings)
+    responseBody = body && typeof body === 'object' && !Array.isArray(body)
+      ? { ...body, _timings: timings }
+      : body
+    return originalJson(responseBody)
   }
 
   res.send = (body) => {
+    const timings = getTimings()
+    setTimingHeaders(timings)
     if (responseBody === undefined) responseBody = parseBody(body)
     return originalSend(body)
   }
 
   res.on('finish', () => {
+    const timings = getTimings()
     console.log(JSON.stringify({
       method: req.method,
       url: req.originalUrl,
       statusCode: res.statusCode,
-      durationMs: Date.now() - startedAt,
+      responseTimeMs: timings.responseTimeMs,
+      dbTimeMs: timings.dbTimeMs,
+      dbQueryCount: timings.dbQueryCount,
       request: {
         params: redact(req.params),
         query: redact(req.query),

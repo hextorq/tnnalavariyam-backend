@@ -80,6 +80,53 @@ function getRequestedScopeCode(data) {
   return `VILLAGE-${data.villageCode}`
 }
 
+async function upsertGeoUnit({ code, name, type, parentId, path }) {
+  return prisma.geoUnit.upsert({
+    where: { code },
+    update: { name, tamilName: name, type, parentId, path },
+    create: { code, name, tamilName: name, type, parentId, path },
+  })
+}
+
+async function ensureSignupScope(data) {
+  if (data.scopeId) return prisma.geoUnit.findUnique({ where: { id: data.scopeId } })
+
+  const state = await upsertGeoUnit({
+    code: 'STATE-33',
+    name: 'Tamil Nadu',
+    type: 'STATE',
+    parentId: null,
+    path: '/',
+  })
+  if (data.requestedRole === 'STATE_ADMIN') return state
+
+  const district = await upsertGeoUnit({
+    code: `DISTRICT-${data.districtCode}`,
+    name: data.district,
+    type: 'DISTRICT',
+    parentId: state.id,
+    path: `${state.path}${state.id}/`,
+  })
+  if (data.requestedRole === 'DISTRICT_ADMIN') return district
+
+  const taluk = await upsertGeoUnit({
+    code: `TALUK-${data.talukCode}`,
+    name: data.taluk,
+    type: 'TALUK',
+    parentId: district.id,
+    path: `${district.path}${district.id}/`,
+  })
+  if (data.requestedRole === 'TALUK_ADMIN') return taluk
+
+  return upsertGeoUnit({
+    code: `VILLAGE-${data.villageCode}`,
+    name: data.village,
+    type: 'VILLAGE',
+    parentId: taluk.id,
+    path: `${taluk.path}${taluk.id}/`,
+  })
+}
+
 async function checkSignupAvailability(req, res, next) {
   try {
     const data = availabilitySchema.parse(req.query)
@@ -126,10 +173,13 @@ async function requestSignup(req, res, next) {
       return res.status(400).json({ message: 'State must be Tamil Nadu' })
     }
 
-    const scope = data.scopeId
-      ? await prisma.geoUnit.findUnique({ where: { id: data.scopeId } })
-      : await prisma.geoUnit.findUnique({ where: { code: getRequestedScopeCode(data) } })
-    if (!scope) return res.status(400).json({ message: 'Selected hierarchy scope not found' })
+    const scope = await ensureSignupScope(data)
+    if (!scope) {
+      return res.status(400).json({
+        message: 'Selected hierarchy scope not found',
+        requestedScopeCode: getRequestedScopeCode(data),
+      })
+    }
     if (!validateRoleScope(data.requestedRole, scope.type)) {
       return res.status(400).json({ message: `${data.requestedRole} cannot be requested for ${scope.type} scope` })
     }

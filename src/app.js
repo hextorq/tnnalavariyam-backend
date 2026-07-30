@@ -9,6 +9,7 @@ const routes = require('./routes')
 const { healthCheck } = require('./controllers/health.controller')
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandlers')
 const { requestLogger } = require('./middleware/requestLogger')
+const { requestContext } = require('./services/requestContext')
 
 const app = express()
 
@@ -16,6 +17,7 @@ app.use(helmet())
 app.use(cors({ origin: frontendOrigin, credentials: true }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
+app.use(requestContext)
 app.use(requestLogger)
 app.use('/uploads', express.static(path.resolve(uploadDir)))
 
