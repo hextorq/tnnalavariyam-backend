@@ -9,13 +9,15 @@ const {
   validateRoleScope,
 } = require('../services/rbac.service')
 
+const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
+
 const signupRequestSchema = z.object({
   username: z.string().min(3),
   email: z.string().email(),
   password: z.string().min(6),
   confirmPassword: z.string().optional(),
   fullName: z.string().min(2),
-  phone: z.string().min(6),
+  phone: phoneSchema,
   addressLine: z.string().min(5),
   state: z.string().default('Tamil Nadu'),
   district: z.string().min(1),
@@ -56,14 +58,14 @@ const loginSchema = z.object({
 const availabilitySchema = z.object({
   username: z.string().optional(),
   email: z.string().email().optional(),
-  phone: z.string().optional(),
+  phone: phoneSchema.optional(),
 }).refine((data) => data.username || data.email || data.phone, {
   message: 'Username, email or phone is required',
 })
 
 const signupTrackingSchema = z.object({
   requestNo: z.string().min(1),
-  phone: z.string().optional(),
+  phone: phoneSchema.optional(),
 })
 
 const signupReviewSchema = z.object({

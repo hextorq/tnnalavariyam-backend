@@ -3,6 +3,8 @@ const prisma = require('../config/prisma')
 const { z } = require('zod')
 const { getVisibleSubmissionWhere, isAdminRole } = require('../services/rbac.service')
 
+const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
+
 const submissionSchema = z.object({
   formKey: z.string().min(1),
   applicantData: z.record(z.string(), z.unknown()),
@@ -13,7 +15,7 @@ const submissionSchema = z.object({
 
 const trackingSchema = z.object({
   applicationNo: z.string().min(1),
-  phone: z.string().optional(),
+  phone: phoneSchema.optional(),
 })
 
 const revisionSchema = z.object({
