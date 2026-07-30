@@ -19,13 +19,13 @@ const signupRequestSchema = z.object({
   addressLine: z.string().min(5),
   state: z.string().default('Tamil Nadu'),
   district: z.string().min(1),
-  taluk: z.string().min(1),
-  village: z.string().min(1),
+  taluk: z.string().optional().default(''),
+  village: z.string().optional().default(''),
   districtCode: z.string().min(1),
-  talukCode: z.string().min(1),
-  villageCode: z.string().min(1),
+  talukCode: z.string().optional().default(''),
+  villageCode: z.string().optional().default(''),
   pincode: z.string().min(4),
-  requestedRole: z.enum(['STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'PARTNER']),
+  requestedRole: z.enum(['DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'PARTNER']),
   scopeId: z.preprocess((value) => value ? Number(value) : undefined, z.number().int().positive().optional()),
   photoPath: z.string().min(1),
   idProofType: z.enum(['VOTER_ID', 'RATION_CARD', 'AADHAR_CARD', 'PAN_CARD', 'DRIVING_LICENSE']),
@@ -34,6 +34,18 @@ const signupRequestSchema = z.object({
 }).refine((data) => !data.confirmPassword || data.password === data.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],
+}).refine((data) => data.requestedRole === 'DISTRICT_ADMIN' || data.taluk, {
+  message: 'Taluk is required for this role',
+  path: ['taluk'],
+}).refine((data) => data.requestedRole === 'DISTRICT_ADMIN' || data.talukCode, {
+  message: 'Taluk code is required for this role',
+  path: ['talukCode'],
+}).refine((data) => !['VILLAGE_ADMIN', 'PARTNER'].includes(data.requestedRole) || data.village, {
+  message: 'Village is required for this role',
+  path: ['village'],
+}).refine((data) => !['VILLAGE_ADMIN', 'PARTNER'].includes(data.requestedRole) || data.villageCode, {
+  message: 'Village code is required for this role',
+  path: ['villageCode'],
 })
 
 const loginSchema = z.object({
@@ -74,7 +86,6 @@ function publicUploadPath(file) {
 
 function getRequestedScopeCode(data) {
   if (data.scopeId) return null
-  if (data.requestedRole === 'STATE_ADMIN') return 'STATE-33'
   if (data.requestedRole === 'DISTRICT_ADMIN') return `DISTRICT-${data.districtCode}`
   if (data.requestedRole === 'TALUK_ADMIN') return `TALUK-${data.talukCode}`
   return `VILLAGE-${data.villageCode}`
@@ -98,8 +109,6 @@ async function ensureSignupScope(data) {
     parentId: null,
     path: '/',
   })
-  if (data.requestedRole === 'STATE_ADMIN') return state
-
   const district = await upsertGeoUnit({
     code: `DISTRICT-${data.districtCode}`,
     name: data.district,
