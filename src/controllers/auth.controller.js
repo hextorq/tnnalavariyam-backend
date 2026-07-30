@@ -10,6 +10,7 @@ const {
 } = require('../services/rbac.service')
 
 const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
+const pincodeSchema = z.string().regex(/^\d{6}$/, 'Pincode must be exactly 6 digits')
 
 const signupRequestSchema = z.object({
   username: z.string().min(3),
@@ -26,7 +27,7 @@ const signupRequestSchema = z.object({
   districtCode: z.string().min(1),
   talukCode: z.string().optional().default(''),
   villageCode: z.string().optional().default(''),
-  pincode: z.string().min(4),
+  pincode: pincodeSchema,
   requestedRole: z.enum(['DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN', 'PARTNER']),
   scopeId: z.preprocess((value) => value ? Number(value) : undefined, z.number().int().positive().optional()),
   photoPath: z.string().min(1),
