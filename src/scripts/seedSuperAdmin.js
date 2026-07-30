@@ -1,12 +1,14 @@
+require('dotenv').config()
+
 const bcrypt = require('bcryptjs')
 const prisma = require('../config/prisma')
 
 const credentials = {
-  username: process.env.SUPER_ADMIN_USERNAME || 'superadmin',
-  email: process.env.SUPER_ADMIN_EMAIL || 'admin@tnnalavariyam.com',
+  username: process.env.SUPER_ADMIN_USERNAME || 'hextorqadmin',
+  email: process.env.SUPER_ADMIN_EMAIL || 'hextorqtechnologies@gmail.com',
   phone: process.env.SUPER_ADMIN_PHONE || '9000000001',
-  password: process.env.SUPER_ADMIN_PASSWORD || 'Admin@12345',
-  name: process.env.SUPER_ADMIN_NAME || 'Super Admin',
+  password: process.env.SUPER_ADMIN_PASSWORD || 'HexTorq@2026.',
+  name: process.env.SUPER_ADMIN_NAME || 'HexTorq Technologies',
 }
 
 async function seedSuperAdmin() {
