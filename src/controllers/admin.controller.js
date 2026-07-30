@@ -1,5 +1,5 @@
 const prisma = require('../config/prisma')
-const { getVisibleScopeWhere, getVisibleSignupWhere, getVisibleSubmissionWhere } = require('../services/rbac.service')
+const { getVisibleScopeWhere, getVisibleSignupWhere, getVisibleSubmissionWhere, roleRank } = require('../services/rbac.service')
 
 function getVisibleUserWhere(user) {
   if (!user) return { id: -1 }
@@ -54,9 +54,9 @@ async function getAdminOverview(req, res, next) {
       prisma.userSignupRequest.groupBy({ by: ['status'], where: signupWhere, _count: { _all: true } }),
       prisma.applicationSubmission.groupBy({ by: ['status'], where: submissionWhere, _count: { _all: true } }),
       prisma.user.findMany({
-        where: { AND: [userWhere, { isActive: true }] },
-        orderBy: [{ lastLoginAt: 'desc' }, { createdAt: 'desc' }],
-        take: 50,
+        where: userWhere,
+        orderBy: [{ isActive: 'desc' }, { lastLoginAt: 'desc' }, { createdAt: 'desc' }],
+        take: 100,
         select: {
           id: true,
           username: true,
@@ -143,4 +143,40 @@ async function getAdminOverview(req, res, next) {
   }
 }
 
-module.exports = { getAdminOverview }
+async function updateUserLoginStatus(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    const isActive = Boolean(req.body?.isActive)
+    if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid user id' })
+    if (id === req.user.id) return res.status(400).json({ message: 'You cannot block your own login' })
+
+    const targetUser = await prisma.user.findFirst({
+      where: { AND: [getVisibleUserWhere(req.user), { id }] },
+      select: { id: true, username: true, role: true, isActive: true },
+    })
+    if (!targetUser) return res.status(404).json({ message: 'User not found in your hierarchy scope' })
+    if (req.user.role !== 'SUPER_ADMIN' && roleRank[targetUser.role] <= roleRank[req.user.role]) {
+      return res.status(403).json({ message: 'You cannot change login access for this role' })
+    }
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        isActive,
+        auditLogs: {
+          create: {
+            action: isActive ? 'LOGIN_UNBLOCKED' : 'LOGIN_BLOCKED',
+            metadata: { actorId: req.user.id },
+          },
+        },
+      },
+      select: { id: true, username: true, role: true, isActive: true, lastLoginAt: true },
+    })
+
+    res.json({ user })
+  } catch (error) {
+    next(error)
+  }
+}
+
+module.exports = { getAdminOverview, updateUserLoginStatus }
