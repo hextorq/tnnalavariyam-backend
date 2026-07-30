@@ -430,6 +430,20 @@ async function login(req, res, next) {
       return res.status(401).json({ message: 'Invalid credentials or account not approved yet' })
     }
 
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }),
+      prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'LOGIN',
+          metadata: { identifier: data.identifier },
+        },
+      }),
+    ])
+
     const token = jwt.sign({ sub: user.id, role: user.role, scopeId: user.scopeId }, jwtSecret, { expiresIn: '7d' })
     res.json({
       token,
