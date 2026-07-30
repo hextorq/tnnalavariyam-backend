@@ -31,7 +31,7 @@ function parseBody(body) {
 }
 
 function requestLogger(req, res, next) {
-  const startedAt = Date.now()
+  const startedAt = performance.now()
   const { getRequestMetrics } = require('../services/requestContext')
   const originalJson = res.json.bind(res)
   const originalSend = res.send.bind(res)
@@ -39,17 +39,26 @@ function requestLogger(req, res, next) {
 
   function getTimings() {
     const dbMetrics = getRequestMetrics()
+    const serverProcessingTimeMs = Math.round((performance.now() - startedAt) * 100) / 100
+    const dbTimeMs = Math.round(dbMetrics.dbTimeMs * 100) / 100
     return {
-      responseTimeMs: Date.now() - startedAt,
-      dbTimeMs: dbMetrics.dbTimeMs,
+      responseTimeMs: serverProcessingTimeMs,
+      serverProcessingTimeMs,
+      dbRoundTripTimeMs: dbTimeMs,
+      dbTimeMs,
       dbQueryCount: dbMetrics.dbQueryCount,
+      nonDbTimeMs: Math.max(0, Math.round((serverProcessingTimeMs - dbTimeMs) * 100) / 100),
+      dbQueries: dbMetrics.dbQueries,
     }
   }
 
   function setTimingHeaders(timings) {
     if (res.headersSent) return
     res.setHeader('X-Response-Time-Ms', String(timings.responseTimeMs))
+    res.setHeader('X-Server-Processing-Time-Ms', String(timings.serverProcessingTimeMs))
+    res.setHeader('X-Non-DB-Time-Ms', String(timings.nonDbTimeMs))
     res.setHeader('X-DB-Time-Ms', String(timings.dbTimeMs))
+    res.setHeader('X-DB-Round-Trip-Time-Ms', String(timings.dbRoundTripTimeMs))
     res.setHeader('X-DB-Query-Count', String(timings.dbQueryCount))
   }
 
@@ -75,9 +84,14 @@ function requestLogger(req, res, next) {
       method: req.method,
       url: req.originalUrl,
       statusCode: res.statusCode,
+      totalServerTimeMs: timings.serverProcessingTimeMs,
       responseTimeMs: timings.responseTimeMs,
+      serverProcessingTimeMs: timings.serverProcessingTimeMs,
+      nonDbTimeMs: timings.nonDbTimeMs,
+      dbRoundTripTimeMs: timings.dbRoundTripTimeMs,
       dbTimeMs: timings.dbTimeMs,
       dbQueryCount: timings.dbQueryCount,
+      dbQueries: timings.dbQueries,
       request: {
         params: redact(req.params),
         query: redact(req.query),

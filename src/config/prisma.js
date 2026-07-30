@@ -4,12 +4,12 @@ const { recordDbQuery } = require('../services/requestContext')
 const prisma = new PrismaClient().$extends({
   query: {
     $allModels: {
-      async $allOperations({ args, query }) {
-        const startedAt = Date.now()
+      async $allOperations({ model, operation, args, query }) {
+        const startedAt = performance.now()
         try {
           return await query(args)
         } finally {
-          recordDbQuery(Date.now() - startedAt)
+          recordDbQuery(performance.now() - startedAt, { model, operation })
         }
       },
     },
