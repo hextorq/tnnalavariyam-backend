@@ -41,6 +41,14 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
+const availabilitySchema = z.object({
+  username: z.string().optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+}).refine((data) => data.username || data.email || data.phone, {
+  message: 'Username, email or phone is required',
+})
+
 const signupTrackingSchema = z.object({
   requestNo: z.string().min(1),
   phone: z.string().optional(),
@@ -70,6 +78,40 @@ function getRequestedScopeCode(data) {
   if (data.requestedRole === 'DISTRICT_ADMIN') return `DISTRICT-${data.districtCode}`
   if (data.requestedRole === 'TALUK_ADMIN') return `TALUK-${data.talukCode}`
   return `VILLAGE-${data.villageCode}`
+}
+
+async function checkSignupAvailability(req, res, next) {
+  try {
+    const data = availabilitySchema.parse(req.query)
+    const fields = ['username', 'email', 'phone'].filter((field) => data[field])
+    const activeUser = await prisma.user.findFirst({
+      where: { OR: fields.map((field) => ({ [field]: data[field] })) },
+      select: { username: true, email: true, phone: true },
+    })
+    const pendingRequest = await prisma.userSignupRequest.findFirst({
+      where: {
+        status: 'PENDING',
+        OR: fields.map((field) => ({ [field]: data[field] })),
+      },
+      select: { username: true, email: true, phone: true },
+    })
+
+    const conflicts = {}
+    for (const field of fields) {
+      conflicts[field] = {
+        available: activeUser?.[field] !== data[field] && pendingRequest?.[field] !== data[field],
+        activeUser: activeUser?.[field] === data[field],
+        pendingRequest: pendingRequest?.[field] === data[field],
+      }
+    }
+
+    res.json({
+      available: Object.values(conflicts).every((conflict) => conflict.available),
+      conflicts,
+    })
+  } catch (error) {
+    next(error)
+  }
 }
 
 async function requestSignup(req, res, next) {
@@ -272,6 +314,7 @@ async function login(req, res, next) {
 }
 
 module.exports = {
+  checkSignupAvailability,
   listSignupRequests,
   login,
   requestSignup,
