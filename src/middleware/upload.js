@@ -67,6 +67,10 @@ const uploadSignupFilesBase = signupUpload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'idProof', maxCount: 1 },
 ])
+const uploadSignupTempBase = signupUpload.fields([
+  { name: 'photo', maxCount: 1 },
+  { name: 'idProof', maxCount: 1 },
+])
 
 function removeUploadedFile(file) {
   if (file?.path) fs.rmSync(file.path, { force: true })
@@ -92,4 +96,28 @@ function uploadSignupFiles(req, res, next) {
   })
 }
 
-module.exports = { uploadSignupFiles }
+function uploadSignupTempFile(req, res, next) {
+  uploadSignupTempBase(req, res, (error) => {
+    if (error) return next(error)
+
+    const photo = req.files?.photo?.[0]
+    const idProof = req.files?.idProof?.[0]
+    if (!photo && !idProof) return res.status(400).json({ message: 'No signup file uploaded' })
+    if (photo && idProof) {
+      removeUploadedFile(photo)
+      removeUploadedFile(idProof)
+      return res.status(400).json({ message: 'Upload one file at a time' })
+    }
+    if (photo && photo.size > uploadRules.photo.maxSize) {
+      removeUploadedFile(photo)
+      return res.status(400).json({ message: 'Passport photo must be 5 MB or less' })
+    }
+    if (idProof && idProof.size > uploadRules.idProof.maxSize) {
+      removeUploadedFile(idProof)
+      return res.status(400).json({ message: 'ID proof document must be 15 MB or less' })
+    }
+    return next()
+  })
+}
+
+module.exports = { uploadSignupFiles, uploadSignupTempFile }

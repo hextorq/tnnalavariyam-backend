@@ -1,8 +1,10 @@
 const bcrypt = require('bcryptjs')
+const fs = require('fs/promises')
 const jwt = require('jsonwebtoken')
+const path = require('path')
 const { z } = require('zod')
 const prisma = require('../config/prisma')
-const { jwtSecret } = require('../config/env')
+const { jwtSecret, uploadDir } = require('../config/env')
 const {
   assertCanApproveSignup,
   getVisibleSignupWhere,
@@ -85,6 +87,17 @@ function splitName(fullName) {
 function publicUploadPath(file) {
   if (!file) return undefined
   return `/uploads/signup/${file.filename}`
+}
+
+function resolveSignupUploadPath(publicPath) {
+  if (!publicPath || typeof publicPath !== 'string') return null
+  if (!publicPath.startsWith('/uploads/signup/')) return null
+  const basename = path.basename(publicPath)
+  if (!basename || basename !== publicPath.split('/').at(-1)) return null
+  const uploadRoot = path.resolve(uploadDir, 'signup')
+  const targetPath = path.resolve(uploadRoot, basename)
+  if (!targetPath.startsWith(`${uploadRoot}${path.sep}`)) return null
+  return targetPath
 }
 
 function getCredentialMatches(source, target) {
@@ -304,6 +317,37 @@ async function requestSignup(req, res, next) {
   }
 }
 
+async function uploadSignupTemp(req, res, next) {
+  try {
+    const photo = req.files?.photo?.[0]
+    const idProof = req.files?.idProof?.[0]
+    const file = photo || idProof
+    const field = photo ? 'photo' : 'idProof'
+    res.status(201).json({
+      upload: {
+        field,
+        path: publicUploadPath(file),
+        originalName: file.originalname,
+        sizeBytes: file.size,
+        mimeType: file.mimetype,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function deleteSignupTemp(req, res, next) {
+  try {
+    const targetPath = resolveSignupUploadPath(req.body?.path)
+    if (!targetPath) return res.status(400).json({ message: 'Invalid upload path' })
+    await fs.rm(targetPath, { force: true })
+    res.json({ deleted: true })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function listSignupRequests(req, res, next) {
   try {
     const visibleWhere = getVisibleSignupWhere(req.user)
@@ -456,9 +500,11 @@ async function login(req, res, next) {
 
 module.exports = {
   checkSignupAvailability,
+  deleteSignupTemp,
   listSignupRequests,
   login,
   requestSignup,
   reviewSignupRequest,
   trackSignupRequest,
+  uploadSignupTemp,
 }
