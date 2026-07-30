@@ -9,7 +9,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed:hierarchy": "node src/scripts/seedTamilNaduHierarchy.js"
+    "seed:hierarchy": "node src/scripts/seedTamilNaduHierarchy.js",
+    "seed:super-admin": "node src/scripts/seedSuperAdmin.js"
   },
   "keywords": [],
   "author": "",
