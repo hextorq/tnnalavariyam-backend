@@ -4,11 +4,11 @@ const bcrypt = require('bcryptjs')
 const prisma = require('../config/prisma')
 
 const credentials = {
-  username: process.env.SUPER_ADMIN_USERNAME || 'hextorqadmin',
-  email: process.env.SUPER_ADMIN_EMAIL || 'hextorqtechnologies@gmail.com',
-  phone: process.env.SUPER_ADMIN_PHONE || '9000000001',
-  password: process.env.SUPER_ADMIN_PASSWORD || 'HexTorq@2026.',
-  name: process.env.SUPER_ADMIN_NAME || 'HexTorq Technologies',
+  username: 'tnnalavariyam-admin',
+  email: 'admin@tnnalavariyam.com',
+  phone:  '9000000051',
+  password: 'Tnnalavariyam@2026.',
+  name:  'Tnnalavariyam-Admin',
 }
 
 async function seedSuperAdmin() {
@@ -28,11 +28,11 @@ async function seedSuperAdmin() {
     email: credentials.email,
     phone: credentials.phone,
     passwordHash,
-    role: 'SUPER_ADMIN',
+    role: 'STATE_ADMIN',
     scopeId: null,
     isActive: true,
     name: credentials.name,
-    firstName: 'Super',
+    firstName: 'Tnnalavariyam',
     lastName: 'Admin',
   }
 
