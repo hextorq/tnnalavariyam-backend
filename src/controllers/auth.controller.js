@@ -457,6 +457,33 @@ async function trackSignupRequest(req, res, next) {
 
     if (!signupRequest) return res.status(404).json({ message: 'Signup request not found / பதிவு கோரிக்கை கிடைக்கவில்லை' })
 
+    // Check if the user is authenticated optionally
+    const header = req.headers.authorization || ''
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null
+    let isAuthenticated = false
+    if (token) {
+      try {
+        const payload = jwt.verify(token, jwtSecret)
+        const user = await prisma.user.findUnique({ where: { id: Number(payload.sub) } })
+        if (user && user.isActive) {
+          isAuthenticated = true
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (!isAuthenticated) {
+      if (!data.phone) {
+        return res.status(400).json({ message: 'Phone number is required for public tracking' })
+      }
+      const targetPhone = cleanPhone(data.phone)
+      const requestPhone = cleanPhone(signupRequest.phone)
+      if (targetPhone !== requestPhone) {
+        return res.status(404).json({ message: 'Signup request not found / பதிவு கோரிக்கை கிடைக்கவில்லை' })
+      }
+    }
+
     const scopeName = signupRequest.scope?.name || signupRequest.village || signupRequest.taluk || signupRequest.district || 'Tamil Nadu'
 
     res.json({

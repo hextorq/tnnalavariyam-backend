@@ -2,6 +2,8 @@ const { applicationForms } = require('../services/formCatalog')
 const prisma = require('../config/prisma')
 const { z } = require('zod')
 const { getVisibleSubmissionWhere, isAdminRole } = require('../services/rbac.service')
+const jwt = require('jsonwebtoken')
+const { jwtSecret } = require('../config/env')
 
 const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
 
@@ -141,7 +143,26 @@ async function trackSubmission(req, res, next) {
 
     if (!submission) return res.status(404).json({ message: 'Application not found' })
 
-    if (data.phone) {
+    // Check if the user is authenticated optionally
+    const header = req.headers.authorization || ''
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null
+    let isAuthenticated = false
+    if (token) {
+      try {
+        const payload = jwt.verify(token, jwtSecret)
+        const user = await prisma.user.findUnique({ where: { id: Number(payload.sub) } })
+        if (user && user.isActive) {
+          isAuthenticated = true
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (!isAuthenticated) {
+      if (!data.phone) {
+        return res.status(400).json({ message: 'Phone number is required for public tracking' })
+      }
       const targetPhone = String(data.phone).trim()
       const userPhone = String(submission.user?.phone || '').trim()
       const applicantPhone = String(
