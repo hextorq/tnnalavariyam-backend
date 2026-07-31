@@ -490,24 +490,43 @@ async function login(req, res, next) {
     ])
 
     let photoPath = user.photoPath
-    if (!photoPath) {
-      const signupReq = await prisma.userSignupRequest.findFirst({
-        where: {
-          OR: [
-            { approvedUserId: user.id },
-            { username: user.username },
-            { email: user.email },
-          ],
-        },
-        select: { photoPath: true },
-      })
-      if (signupReq?.photoPath) photoPath = signupReq.photoPath
+    let signupDetails = null
+    const signupReq = await prisma.userSignupRequest.findFirst({
+      where: {
+        OR: [
+          { approvedUserId: user.id },
+          { username: user.username },
+          { email: user.email },
+        ],
+      },
+      select: { photoPath: true, state: true, district: true, taluk: true, village: true },
+    })
+    if (signupReq) {
+      signupDetails = signupReq
+      if (!photoPath && signupReq.photoPath) photoPath = signupReq.photoPath
     }
+
+    const fullUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { scope: true },
+    })
 
     const token = jwt.sign({ sub: user.id, role: user.role, scopeId: user.scopeId }, jwtSecret, { expiresIn: '7d' })
     res.json({
       token,
-      user: { id: user.id, username: user.username, email: user.email, role: user.role, scopeId: user.scopeId, photoPath },
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        scopeId: user.scopeId,
+        photoPath,
+        state: signupDetails?.state || 'Tamil Nadu',
+        district: signupDetails?.district || fullUser?.scope?.name || '',
+        taluk: signupDetails?.taluk || '',
+        village: signupDetails?.village || '',
+        scope: fullUser?.scope,
+      },
     })
   } catch (error) {
     next(error)
