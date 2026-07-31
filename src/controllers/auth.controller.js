@@ -66,11 +66,6 @@ const availabilitySchema = z.object({
   message: 'Username, email or phone is required',
 })
 
-const signupTrackingSchema = z.object({
-  requestNo: z.string().min(1),
-  phone: phoneSchema.optional(),
-})
-
 const signupReviewSchema = z.object({
   status: z.enum(['APPROVED', 'REJECTED']),
   reason: z.string().optional(),
