@@ -462,6 +462,88 @@ async function trackSignupRequest(req, res, next) {
   }
 }
 
+async function resolveUserGeoHierarchy(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      scope: {
+        include: {
+          parent: {
+            include: {
+              parent: {
+                include: {
+                  parent: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!user) return null
+
+  const signupReq = await prisma.userSignupRequest.findFirst({
+    where: {
+      OR: [
+        { approvedUserId: user.id },
+        { username: user.username },
+        { email: user.email },
+        { phone: user.phone },
+      ],
+    },
+    select: { photoPath: true, state: true, district: true, taluk: true, village: true },
+  })
+
+  let state = signupReq?.state || 'Tamil Nadu'
+  let district = signupReq?.district || ''
+  let taluk = signupReq?.taluk || ''
+  let village = signupReq?.village || ''
+  let photoPath = user.photoPath || signupReq?.photoPath || ''
+
+  if (user.scope) {
+    let curr = user.scope
+    const chain = []
+    while (curr) {
+      chain.push(curr)
+      curr = curr.parent
+    }
+
+    for (const unit of chain) {
+      if (unit.type === 'VILLAGE' && !village) village = unit.name
+      if (unit.type === 'TALUK' && !taluk) taluk = unit.name
+      if (unit.type === 'DISTRICT' && !district) district = unit.name
+      if (unit.type === 'STATE' && (!state || state === 'Tamil Nadu')) state = unit.name
+    }
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    scopeId: user.scopeId,
+    photoPath,
+    state: state || 'Tamil Nadu',
+    district: district || (user.role === 'SUPER_ADMIN' ? 'All Districts' : 'Assigned District'),
+    taluk: taluk || (['SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN'].includes(user.role) ? 'All Taluks' : 'Assigned Taluk'),
+    village: village || (['SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN'].includes(user.role) ? 'All Villages' : 'Assigned Village'),
+    scope: user.scope,
+  }
+}
+
+async function getMe(req, res, next) {
+  try {
+    const userPayload = await resolveUserGeoHierarchy(req.user.id)
+    if (!userPayload) return res.status(404).json({ message: 'User not found' })
+    res.json({ user: userPayload })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function login(req, res, next) {
   try {
     const data = loginSchema.parse(req.body)
@@ -489,44 +571,11 @@ async function login(req, res, next) {
       }),
     ])
 
-    let photoPath = user.photoPath
-    let signupDetails = null
-    const signupReq = await prisma.userSignupRequest.findFirst({
-      where: {
-        OR: [
-          { approvedUserId: user.id },
-          { username: user.username },
-          { email: user.email },
-        ],
-      },
-      select: { photoPath: true, state: true, district: true, taluk: true, village: true },
-    })
-    if (signupReq) {
-      signupDetails = signupReq
-      if (!photoPath && signupReq.photoPath) photoPath = signupReq.photoPath
-    }
-
-    const fullUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      include: { scope: true },
-    })
-
+    const userPayload = await resolveUserGeoHierarchy(user.id)
     const token = jwt.sign({ sub: user.id, role: user.role, scopeId: user.scopeId }, jwtSecret, { expiresIn: '7d' })
     res.json({
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        scopeId: user.scopeId,
-        photoPath,
-        state: signupDetails?.state || 'Tamil Nadu',
-        district: signupDetails?.district || fullUser?.scope?.name || '',
-        taluk: signupDetails?.taluk || '',
-        village: signupDetails?.village || '',
-        scope: fullUser?.scope,
-      },
+      user: userPayload,
     })
   } catch (error) {
     next(error)
@@ -536,6 +585,7 @@ async function login(req, res, next) {
 module.exports = {
   checkSignupAvailability,
   deleteSignupTemp,
+  getMe,
   listSignupRequests,
   login,
   requestSignup,

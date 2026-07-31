@@ -2,6 +2,7 @@ const express = require('express')
 const {
   checkSignupAvailability,
   deleteSignupTemp,
+  getMe,
   listSignupRequests,
   login,
   requestSignup,
@@ -15,6 +16,7 @@ const { requireRole } = require('../services/rbac.service')
 
 const router = express.Router()
 
+router.get('/me', authenticate, getMe)
 router.get('/availability', checkSignupAvailability)
 router.post('/uploads/signup-temp', uploadSignupTempFile, uploadSignupTemp)
 router.delete('/uploads/signup-temp', deleteSignupTemp)
