@@ -434,22 +434,44 @@ async function reviewSignupRequest(req, res, next) {
   }
 }
 
+const signupTrackingSchema = z.object({
+  requestNo: z.string().min(1),
+  phone: z.string().optional(),
+})
+
+function cleanPhone(val) {
+  if (!val) return ''
+  return String(val).replace(/\D/g, '').slice(-10)
+}
+
 async function trackSignupRequest(req, res, next) {
   try {
     const data = signupTrackingSchema.parse({ ...req.query, ...req.body })
-    const signupRequest = await prisma.userSignupRequest.findUnique({
-      where: { requestNo: data.requestNo },
+    const requestNo = String(data.requestNo || '').trim()
+
+    const signupRequest = await prisma.userSignupRequest.findFirst({
+      where: {
+        requestNo: { equals: requestNo, mode: 'insensitive' },
+      },
       include: { scope: true, reviewedBy: { select: { username: true, role: true } } },
     })
+
     if (!signupRequest) return res.status(404).json({ message: 'Signup request not found' })
-    if (data.phone && signupRequest.phone !== data.phone) return res.status(404).json({ message: 'Signup request not found' })
+
+    if (data.phone) {
+      const targetPhone = cleanPhone(data.phone)
+      const recordPhone = cleanPhone(signupRequest.phone)
+      if (targetPhone && recordPhone && targetPhone !== recordPhone) {
+        return res.status(404).json({ message: 'Signup request not found' })
+      }
+    }
 
     res.json({
       tracking: {
         requestNo: signupRequest.requestNo,
         fullName: signupRequest.fullName,
         requestedRole: signupRequest.requestedRole,
-        scope: signupRequest.scope.name,
+        scope: signupRequest.scope?.name || signupRequest.district || 'Tamil Nadu',
         status: signupRequest.status,
         reason: signupRequest.reviewReason,
         reviewedBy: signupRequest.reviewedBy,
