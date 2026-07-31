@@ -23,29 +23,29 @@ async function seedSuperAdmin() {
     },
   })
 
+  const stateScope = await prisma.geoUnit.findFirst({ where: { type: 'STATE' } })
+  
+  if (existingUser) {
+    await prisma.user.delete({ where: { id: existingUser.id } })
+  }
+
   const data = {
     username: credentials.username,
     email: credentials.email,
     phone: credentials.phone,
     passwordHash,
     role: 'STATE_ADMIN',
-    scopeId: null,
+    scopeId: stateScope?.id || null,
     isActive: true,
     name: credentials.name,
     firstName: 'Tnnalavariyam',
     lastName: 'Admin',
   }
 
-  const user = existingUser
-    ? await prisma.user.update({
-        where: { id: existingUser.id },
-        data,
-        select: { id: true, username: true, email: true, phone: true, role: true, isActive: true },
-      })
-    : await prisma.user.create({
-        data,
-        select: { id: true, username: true, email: true, phone: true, role: true, isActive: true },
-      })
+  const user = await prisma.user.create({
+    data,
+    select: { id: true, username: true, email: true, phone: true, role: true, scopeId: true, isActive: true },
+  })
 
   console.log({
     message: existingUser ? 'Super admin updated' : 'Super admin created',
