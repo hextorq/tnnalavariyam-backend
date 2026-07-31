@@ -461,20 +461,27 @@ async function trackSignupRequest(req, res, next) {
       }
     }
 
+    const scopeName = signupRequest.scope?.name || signupRequest.village || signupRequest.taluk || signupRequest.district || 'Tamil Nadu'
+
     res.json({
       tracking: {
         requestNo: signupRequest.requestNo,
         fullName: signupRequest.fullName,
         requestedRole: signupRequest.requestedRole,
-        scope: signupRequest.scope?.name || signupRequest.district || 'Tamil Nadu',
+        scope: scopeName,
         status: signupRequest.status,
-        reason: signupRequest.reviewReason,
-        reviewedBy: signupRequest.reviewedBy,
-        reviewedAt: signupRequest.reviewedAt,
+        reason: signupRequest.reviewReason || null,
+        reviewedBy: signupRequest.reviewedBy
+          ? { username: signupRequest.reviewedBy.username, role: signupRequest.reviewedBy.role }
+          : null,
+        reviewedAt: signupRequest.reviewedAt || null,
         createdAt: signupRequest.createdAt,
       },
     })
   } catch (error) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ message: 'Invalid tracking parameters' })
+    }
     next(error)
   }
 }
