@@ -455,15 +455,7 @@ async function trackSignupRequest(req, res, next) {
       include: { scope: true, reviewedBy: { select: { username: true, role: true } } },
     })
 
-    if (!signupRequest) return res.status(404).json({ message: 'Signup request not found' })
-
-    if (data.phone) {
-      const targetPhone = cleanPhone(data.phone)
-      const recordPhone = cleanPhone(signupRequest.phone)
-      if (targetPhone && recordPhone && targetPhone !== recordPhone) {
-        return res.status(404).json({ message: 'Signup request not found' })
-      }
-    }
+    if (!signupRequest) return res.status(404).json({ message: 'Signup request not found / பதிவு கோரிக்கை கிடைக்கவில்லை' })
 
     const scopeName = signupRequest.scope?.name || signupRequest.village || signupRequest.taluk || signupRequest.district || 'Tamil Nadu'
 
