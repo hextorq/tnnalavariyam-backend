@@ -8,8 +8,8 @@ const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 1
 const submissionSchema = z.object({
   formKey: z.string().min(1),
   applicantData: z.record(z.string(), z.unknown()),
-  paymentData: z.record(z.string(), z.unknown()).optional(),
-  paymentReference: z.string().optional(),
+  paymentData: z.record(z.string(), z.unknown()).optional().nullable(),
+  paymentReference: z.string().optional().nullable(),
   submit: z.boolean().optional(),
 })
 
@@ -20,8 +20,8 @@ const trackingSchema = z.object({
 
 const revisionSchema = z.object({
   applicantData: z.record(z.string(), z.unknown()).optional(),
-  paymentData: z.record(z.string(), z.unknown()).optional(),
-  paymentReference: z.string().optional(),
+  paymentData: z.record(z.string(), z.unknown()).optional().nullable(),
+  paymentReference: z.string().optional().nullable(),
   submit: z.boolean().optional(),
 })
 
@@ -35,6 +35,28 @@ const reviewActionByStatus = {
   NEEDS_CORRECTION: 'CORRECTION_REQUESTED',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
+}
+
+async function ensureFormExists(key) {
+  let form = await prisma.applicationForm.findUnique({ where: { key } })
+  if (!form) {
+    const catalogItem = applicationForms.find((item) => item.key === key) || {
+      key,
+      title: key,
+      tamilTitle: key,
+      feeAmount: 150,
+    }
+    form = await prisma.applicationForm.create({
+      data: {
+        key: catalogItem.key,
+        title: catalogItem.title,
+        tamilTitle: catalogItem.tamilTitle,
+        feeAmount: catalogItem.feeAmount ? Number(catalogItem.feeAmount) : null,
+        isActive: true,
+      },
+    })
+  }
+  return form
 }
 
 async function listForms(req, res) {
@@ -62,7 +84,7 @@ async function listSubmissions(req, res, next) {
 async function createSubmission(req, res, next) {
   try {
     const data = submissionSchema.parse(req.body)
-    const form = await prisma.applicationForm.findUnique({ where: { key: data.formKey } })
+    const form = await ensureFormExists(data.formKey)
     if (!form || !form.isActive) return res.status(400).json({ message: 'Application form not found or inactive' })
 
     const applicationNo = `TNW-${Date.now()}-${req.user.id}`
