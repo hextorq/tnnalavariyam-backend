@@ -183,6 +183,8 @@ async function ensureSignupScope(data) {
     parentId: null,
     path: '/',
   })
+  if (data.requestedRole === 'STATE_ADMIN') return state
+
   const district = await upsertGeoUnit({
     code: `DISTRICT-${data.districtCode}`,
     name: data.district,
