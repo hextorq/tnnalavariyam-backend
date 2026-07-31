@@ -446,7 +446,11 @@ async function trackSignupRequest(req, res, next) {
 
     const signupRequest = await prisma.userSignupRequest.findFirst({
       where: {
-        requestNo: { equals: requestNo, mode: 'insensitive' },
+        OR: [
+          { requestNo: requestNo },
+          { requestNo: requestNo.toUpperCase() },
+          { requestNo: requestNo.toLowerCase() },
+        ],
       },
       include: { scope: true, reviewedBy: { select: { username: true, role: true } } },
     })
