@@ -126,7 +126,7 @@ async function trackSubmission(req, res, next) {
   try {
     const data = trackingSchema.parse({ ...req.query, ...req.body })
     const submission = await prisma.applicationSubmission.findUnique({
-      where: { applicationNo: data.applicationNo },
+      where: { applicationNo: data.applicationNo.trim() },
       include: {
         form: true,
         geoUnit: true,
@@ -140,16 +140,36 @@ async function trackSubmission(req, res, next) {
     })
 
     if (!submission) return res.status(404).json({ message: 'Application not found' })
-    if (data.phone && submission.user.phone && submission.user.phone !== data.phone) {
-      return res.status(404).json({ message: 'Application not found' })
+
+    if (data.phone) {
+      const targetPhone = String(data.phone).trim()
+      const userPhone = String(submission.user?.phone || '').trim()
+      const applicantPhone = String(
+        submission.applicantData?.phone ||
+        submission.applicantData?.mobile ||
+        submission.applicantData?.contactPhone ||
+        ''
+      ).trim()
+
+      const isMatch = (targetPhone === userPhone || targetPhone === applicantPhone)
+      if (!isMatch && (userPhone || applicantPhone)) {
+        return res.status(404).json({ message: 'Application not found' })
+      }
     }
+
+    const applicantData = submission.applicantData || {}
+    const applicantName =
+      applicantData.workerName ||
+      applicantData.fullName ||
+      [submission.user?.firstName, submission.user?.lastName].filter(Boolean).join(' ') ||
+      'Applicant'
 
     res.json({
       tracking: {
         applicationNo: submission.applicationNo,
         formTitle: submission.form.title,
         tamilFormTitle: submission.form.tamilTitle,
-        applicantName: [submission.user.firstName, submission.user.lastName].filter(Boolean).join(' '),
+        applicantName,
         scope: submission.geoUnit?.name || null,
         status: submission.status,
         paymentStatus: submission.paymentStatus,
