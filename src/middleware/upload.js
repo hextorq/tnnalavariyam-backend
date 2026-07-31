@@ -4,26 +4,9 @@ const multer = require('multer')
 const { uploadDir } = require('../config/env')
 
 const MB = 1024 * 1024
-const uploadRules = {
-  photo: {
-    maxSize: 5 * MB,
-    extensions: new Set(['.jpg', '.jpeg', '.png', '.webp']),
-    mimePrefixes: ['image/'],
-  },
-  idProof: {
-    maxSize: 15 * MB,
-    extensions: new Set(['.jpg', '.jpeg', '.png', '.webp', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.txt']),
-    mimePrefixes: ['image/'],
-    mimeTypes: new Set([
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/plain',
-    ]),
-  },
-}
+const MAX_FILE_SIZE = 2 * MB
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png'])
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png'])
 
 const storage = multer.diskStorage({
   destination(req, file, cb) {
@@ -32,24 +15,19 @@ const storage = multer.diskStorage({
     cb(null, targetDir)
   },
   filename(req, file, cb) {
-    const ext = path.extname(file.originalname || '')
+    const ext = path.extname(file.originalname || '').toLowerCase()
     const safeName = `${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`
     cb(null, safeName)
   },
 })
 
 function validateFileType(req, file, cb) {
-  const rule = uploadRules[file.fieldname]
-  if (!rule) return cb(new Error('Unsupported upload field'))
-
   const ext = path.extname(file.originalname || '').toLowerCase()
-  const mimeAllowed = rule.mimePrefixes.some((prefix) => file.mimetype?.startsWith(prefix)) || rule.mimeTypes?.has(file.mimetype)
-  const extensionAllowed = rule.extensions.has(ext)
+  const isExtensionAllowed = ALLOWED_EXTENSIONS.has(ext)
+  const isMimeAllowed = ALLOWED_MIME_TYPES.has(file.mimetype?.toLowerCase())
 
-  if (!mimeAllowed && !extensionAllowed) {
-    return cb(new Error(file.fieldname === 'photo'
-      ? 'Passport photo must be an image file'
-      : 'ID proof must be an image, PDF, Word, Excel or text document'))
+  if (!isExtensionAllowed || !isMimeAllowed) {
+    return cb(new Error('Only JPEG (.jpg, .jpeg) and PNG (.png) files are accepted / JPEG மற்றும் PNG படங்கள் மட்டுமே ஏற்றுக் கொள்ளப்படும்.'))
   }
 
   return cb(null, true)
@@ -59,7 +37,7 @@ const signupUpload = multer({
   storage,
   fileFilter: validateFileType,
   limits: {
-    fileSize: 15 * MB,
+    fileSize: MAX_FILE_SIZE,
   },
 })
 
@@ -78,19 +56,24 @@ function removeUploadedFile(file) {
 
 function uploadSignupFiles(req, res, next) {
   uploadSignupFilesBase(req, res, (error) => {
-    if (error) return next(error)
+    if (error) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size must be within 2 MB / கோப்பின் அளவு 2 MB-க்குள் இருக்க வேண்டும்.' })
+      }
+      return res.status(400).json({ message: error.message || 'File upload error' })
+    }
 
     const photo = req.files?.photo?.[0]
     const idProof = req.files?.idProof?.[0]
-    if (photo && photo.size > uploadRules.photo.maxSize) {
+    if (photo && photo.size > MAX_FILE_SIZE) {
       removeUploadedFile(photo)
       removeUploadedFile(idProof)
-      return res.status(400).json({ message: 'Passport photo must be 5 MB or less' })
+      return res.status(400).json({ message: 'Passport photo must be within 2 MB / புகைப்படம் 2 MB-க்குள் இருக்க வேண்டும்.' })
     }
-    if (idProof && idProof.size > uploadRules.idProof.maxSize) {
+    if (idProof && idProof.size > MAX_FILE_SIZE) {
       removeUploadedFile(photo)
       removeUploadedFile(idProof)
-      return res.status(400).json({ message: 'ID proof document must be 15 MB or less' })
+      return res.status(400).json({ message: 'ID proof document must be within 2 MB / ஆவணம் 2 MB-க்குள் இருக்க வேண்டும்.' })
     }
     return next()
   })
@@ -98,23 +81,28 @@ function uploadSignupFiles(req, res, next) {
 
 function uploadSignupTempFile(req, res, next) {
   uploadSignupTempBase(req, res, (error) => {
-    if (error) return next(error)
+    if (error) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size must be within 2 MB / கோப்பின் அளவு 2 MB-க்குள் இருக்க வேண்டும்.' })
+      }
+      return res.status(400).json({ message: error.message || 'File upload error' })
+    }
 
     const photo = req.files?.photo?.[0]
     const idProof = req.files?.idProof?.[0]
-    if (!photo && !idProof) return res.status(400).json({ message: 'No signup file uploaded' })
+    if (!photo && !idProof) return res.status(400).json({ message: 'No file uploaded' })
     if (photo && idProof) {
       removeUploadedFile(photo)
       removeUploadedFile(idProof)
       return res.status(400).json({ message: 'Upload one file at a time' })
     }
-    if (photo && photo.size > uploadRules.photo.maxSize) {
+    if (photo && photo.size > MAX_FILE_SIZE) {
       removeUploadedFile(photo)
-      return res.status(400).json({ message: 'Passport photo must be 5 MB or less' })
+      return res.status(400).json({ message: 'Passport photo must be within 2 MB / புகைப்படம் 2 MB-க்குள் இருக்க வேண்டும்.' })
     }
-    if (idProof && idProof.size > uploadRules.idProof.maxSize) {
+    if (idProof && idProof.size > MAX_FILE_SIZE) {
       removeUploadedFile(idProof)
-      return res.status(400).json({ message: 'ID proof document must be 15 MB or less' })
+      return res.status(400).json({ message: 'ID proof document must be within 2 MB / ஆவணம் 2 MB-க்குள் இருக்க வேண்டும்.' })
     }
     return next()
   })
