@@ -63,6 +63,7 @@ app.use(
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 app.use('/uploads', express.static(path.resolve(uploadDir)))
+app.use('/api/uploads', express.static(path.resolve(uploadDir)))
 
 app.get('/health', healthCheck)
 
