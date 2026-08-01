@@ -2,6 +2,7 @@ const { applicationForms } = require('../services/formCatalog')
 const prisma = require('../config/prisma')
 const { z } = require('zod')
 const fs = require('fs')
+const fsp = fs.promises
 const path = require('path')
 const { getVisibleSubmissionWhere, isAdminRole } = require('../services/rbac.service')
 const jwt = require('jsonwebtoken')
@@ -87,10 +88,9 @@ async function moveImageToSubmission(image, applicationNo) {
   if (!source.startsWith(`${applicationsRoot}${path.sep}`) || !destDir.startsWith(`${applicationsRoot}${path.sep}`)) {
     throw new Error('Invalid image path')
   }
-  await fs.access(source)
-  await fs.mkdir(destDir, { recursive: true })
+  await fsp.mkdir(destDir, { recursive: true })
   const dest = path.join(destDir, basename)
-  await fs.rename(source, dest)
+  await fsp.rename(source, dest)
   return {
     field: image.field,
     path: `/uploads/applications/${applicationNo}/${basename}`,
