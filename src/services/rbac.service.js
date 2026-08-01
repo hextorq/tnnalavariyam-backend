@@ -137,6 +137,7 @@ async function assertCanAssignRole(actor, targetRole, targetScopeId) {
   if (!actor || !isAdminRole(actor.role)) return false
   if (roleRank[targetRole] <= roleRank[actor.role]) return false
   if (actor.role === 'SUPER_ADMIN') return true
+  if (actor.role === 'STATE_ADMIN' && !actor.scopeId) return true
   if (!targetScopeId || !actor.scope) return false
 
   const targetScope = await prisma.geoUnit.findUnique({ where: { id: targetScopeId } })
