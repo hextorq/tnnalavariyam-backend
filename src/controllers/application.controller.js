@@ -453,8 +453,8 @@ async function reviewSubmission(req, res, next) {
     }
 
     const reviewerLevel = getReviewLevelForRole(req.user.role)
-    if (req.user.role !== 'SUPER_ADMIN' && reviewerLevel !== submission.currentReviewLevel) {
-      return res.status(403).json({ message: 'This application is awaiting action at another review level' })
+    if (req.user.role !== 'SUPER_ADMIN' && reviewerLevel < submission.currentReviewLevel) {
+      return res.status(403).json({ message: 'This application is awaiting action at a higher review level' })
     }
 
     let nextStatus = data.status
