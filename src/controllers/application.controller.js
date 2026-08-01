@@ -1,9 +1,11 @@
 const { applicationForms } = require('../services/formCatalog')
 const prisma = require('../config/prisma')
 const { z } = require('zod')
+const fs = require('fs')
+const path = require('path')
 const { getVisibleSubmissionWhere, isAdminRole } = require('../services/rbac.service')
 const jwt = require('jsonwebtoken')
-const { jwtSecret } = require('../config/env')
+const { jwtSecret, uploadDir } = require('../config/env')
 
 const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
 
@@ -300,4 +302,53 @@ async function reviewSubmission(req, res, next) {
   }
 }
 
-module.exports = { listForms, listSubmissions, createSubmission, reviseSubmission, reviewSubmission, trackSubmission }
+async function uploadApplicationTemp(req, res, next) {
+  try {
+    const file = req.file
+    if (!file) return res.status(400).json({ message: 'No file uploaded' })
+    res.status(201).json({
+      upload: {
+        field: file.fieldname,
+        path: `/uploads/applications/${file.filename}`,
+        originalName: file.originalname,
+        sizeBytes: file.size,
+        mimeType: file.mimetype,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function deleteApplicationTemp(req, res, next) {
+  try {
+    const publicPath = req.body?.path
+    if (!publicPath || typeof publicPath !== 'string' || !publicPath.startsWith('/uploads/applications/')) {
+      return res.status(400).json({ message: 'Invalid upload path' })
+    }
+    const basename = path.basename(publicPath)
+    if (!basename || basename !== publicPath.split('/').at(-1)) {
+      return res.status(400).json({ message: 'Invalid upload path' })
+    }
+    const uploadRoot = path.resolve(uploadDir, 'applications')
+    const targetPath = path.resolve(uploadRoot, basename)
+    if (!targetPath.startsWith(`${uploadRoot}${path.sep}`)) {
+      return res.status(400).json({ message: 'Invalid upload path' })
+    }
+    await fs.rm(targetPath, { force: true })
+    res.json({ deleted: true })
+  } catch (error) {
+    next(error)
+  }
+}
+
+module.exports = {
+  listForms,
+  listSubmissions,
+  createSubmission,
+  reviseSubmission,
+  reviewSubmission,
+  trackSubmission,
+  uploadApplicationTemp,
+  deleteApplicationTemp,
+}

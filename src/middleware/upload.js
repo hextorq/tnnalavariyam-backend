@@ -41,6 +41,29 @@ const signupUpload = multer({
   },
 })
 
+const applicationStorage = multer.diskStorage({
+  destination(req, file, cb) {
+    const targetDir = path.resolve(uploadDir, 'applications')
+    fs.mkdirSync(targetDir, { recursive: true })
+    cb(null, targetDir)
+  },
+  filename(req, file, cb) {
+    const ext = path.extname(file.originalname || '').toLowerCase()
+    const safeName = `${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`
+    cb(null, safeName)
+  },
+})
+
+const applicationUpload = multer({
+  storage: applicationStorage,
+  fileFilter: validateFileType,
+  limits: {
+    fileSize: MAX_FILE_SIZE,
+  },
+})
+
+const uploadApplicationTempBase = applicationUpload.single('file')
+
 const uploadSignupFilesBase = signupUpload.fields([
   { name: 'photo', maxCount: 1 },
   { name: 'idProof', maxCount: 1 },
@@ -108,4 +131,22 @@ function uploadSignupTempFile(req, res, next) {
   })
 }
 
-module.exports = { uploadSignupFiles, uploadSignupTempFile }
+function uploadApplicationTempFile(req, res, next) {
+  uploadApplicationTempBase(req, res, (error) => {
+    if (error) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: 'File size must be within 2 MB / கோப்பின் அளவு 2 MB-க்குள் இருக்க வேண்டும்.' })
+      }
+      return res.status(400).json({ message: error.message || 'File upload error' })
+    }
+
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' })
+    if (req.file.size > MAX_FILE_SIZE) {
+      removeUploadedFile(req.file)
+      return res.status(400).json({ message: 'File size must be within 2 MB / கோப்பின் அளவு 2 MB-க்குள் இருக்க வேண்டும்.' })
+    }
+    return next()
+  })
+}
+
+module.exports = { uploadSignupFiles, uploadSignupTempFile, uploadApplicationTempFile }
