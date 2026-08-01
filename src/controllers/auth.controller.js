@@ -54,7 +54,7 @@ const signupRequestSchema = z.object({
 })
 
 const loginSchema = z.object({
-  identifier: z.string().min(1),
+  identifier: z.string().trim().min(1),
   password: z.string().min(1),
 })
 
