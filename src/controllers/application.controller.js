@@ -435,7 +435,7 @@ async function uploadApplicationTemp(req, res, next) {
 
 async function deleteApplicationTemp(req, res, next) {
   try {
-    const publicPath = req.body?.path
+    const publicPath = req.query?.path || req.body?.path
     if (!publicPath || typeof publicPath !== 'string' || !publicPath.startsWith('/uploads/applications/')) {
       return res.status(400).json({ message: 'Invalid upload path' })
     }

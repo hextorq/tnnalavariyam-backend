@@ -336,7 +336,7 @@ async function uploadSignupTemp(req, res, next) {
 
 async function deleteSignupTemp(req, res, next) {
   try {
-    const targetPath = resolveSignupUploadPath(req.body?.path)
+    const targetPath = resolveSignupUploadPath(req.query?.path || req.body?.path)
     if (!targetPath) return res.status(400).json({ message: 'Invalid upload path' })
     await fs.rm(targetPath, { force: true })
     res.json({ deleted: true })
