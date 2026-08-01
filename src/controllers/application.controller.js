@@ -9,9 +9,18 @@ const { jwtSecret, uploadDir } = require('../config/env')
 
 const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
 
+const applicationImageSchema = z.object({
+  field: z.string().min(1),
+  path: z.string().min(1),
+  originalName: z.string().optional().nullable(),
+  sizeBytes: z.number().optional().nullable(),
+  mimeType: z.string().optional().nullable(),
+})
+
 const submissionSchema = z.object({
   formKey: z.string().min(1),
   applicantData: z.record(z.string(), z.unknown()),
+  images: z.array(applicationImageSchema).optional(),
   paymentData: z.record(z.string(), z.unknown()).optional().nullable(),
   paymentReference: z.string().optional().nullable(),
   submit: z.boolean().optional(),
@@ -24,6 +33,7 @@ const trackingSchema = z.object({
 
 const revisionSchema = z.object({
   applicantData: z.record(z.string(), z.unknown()).optional(),
+  images: z.array(applicationImageSchema).optional(),
   paymentData: z.record(z.string(), z.unknown()).optional().nullable(),
   paymentReference: z.string().optional().nullable(),
   submit: z.boolean().optional(),
@@ -63,6 +73,38 @@ async function ensureFormExists(key) {
   return form
 }
 
+async function moveImageToSubmission(image, applicationNo) {
+  if (!image?.path || typeof image.path !== 'string' || !image.path.startsWith('/uploads/applications/')) {
+    throw new Error('Invalid image path')
+  }
+  const basename = path.basename(image.path)
+  if (!basename || basename !== image.path.split('/').at(-1) || basename.includes('..')) {
+    throw new Error('Invalid image path')
+  }
+  const applicationsRoot = path.resolve(uploadDir, 'applications')
+  const source = path.resolve(applicationsRoot, basename)
+  const destDir = path.resolve(applicationsRoot, applicationNo)
+  if (!source.startsWith(`${applicationsRoot}${path.sep}`) || !destDir.startsWith(`${applicationsRoot}${path.sep}`)) {
+    throw new Error('Invalid image path')
+  }
+  await fs.access(source)
+  await fs.mkdir(destDir, { recursive: true })
+  const dest = path.join(destDir, basename)
+  await fs.rename(source, dest)
+  return {
+    field: image.field,
+    path: `/uploads/applications/${applicationNo}/${basename}`,
+    originalName: image.originalName || basename,
+    storedName: basename,
+    sizeBytes: image.sizeBytes || 0,
+    mimeType: image.mimeType || 'image/jpeg',
+  }
+}
+
+async function removeSubmissionFolder(applicationNo) {
+  await fs.rm(path.resolve(uploadDir, 'applications', applicationNo), { recursive: true, force: true })
+}
+
 async function listForms(req, res) {
   res.json({ forms: applicationForms })
 }
@@ -77,6 +119,7 @@ async function listSubmissions(req, res, next) {
         geoUnit: true,
         lastReviewedBy: { select: { id: true, username: true, role: true } },
         user: { select: { id: true, username: true, firstName: true, lastName: true, phone: true, role: true } },
+        documents: { orderBy: { createdAt: 'asc' } },
       },
     })
     res.json({ submissions })
@@ -93,34 +136,64 @@ async function createSubmission(req, res, next) {
 
     const applicationNo = `TNW-${Date.now()}-${req.user.id}`
     const paymentAmount = form.feeAmount ? Number(form.feeAmount) : null
-    const submission = await prisma.applicationSubmission.create({
-      data: {
-        applicationNo,
-        userId: req.user.id,
-        formId: form.id,
-        geoUnitId: req.user.scopeId,
-        applicantData: data.applicantData,
-        paymentData: data.paymentData || {},
-        paymentAmount,
-        paymentReference: data.paymentReference,
-        paymentStatus: data.paymentReference ? 'PAID' : 'PENDING',
-        paymentPaidAt: data.paymentReference ? new Date() : null,
-        status: data.submit ? 'SUBMITTED' : 'DRAFT',
-        submittedAt: data.submit ? new Date() : null,
-        reviewHistory: data.submit
-          ? {
-              create: {
-                actorId: req.user.id,
-                action: 'SUBMITTED',
-                toStatus: 'SUBMITTED',
-              },
-            }
-          : undefined,
-      },
-      include: { form: true, geoUnit: true },
-    })
 
-    res.status(201).json({ submission })
+    let applicantData = data.applicantData
+    const movedImages = []
+    for (const image of data.images || []) {
+      const moved = await moveImageToSubmission(image, applicationNo)
+      movedImages.push(moved)
+      applicantData = { ...applicantData, [moved.field]: moved.path }
+    }
+
+    try {
+      const submission = await prisma.$transaction(async (tx) => {
+        const created = await tx.applicationSubmission.create({
+          data: {
+            applicationNo,
+            userId: req.user.id,
+            formId: form.id,
+            geoUnitId: req.user.scopeId,
+            applicantData,
+            paymentData: data.paymentData || {},
+            paymentAmount,
+            paymentReference: data.paymentReference,
+            paymentStatus: data.paymentReference ? 'PAID' : 'PENDING',
+            paymentPaidAt: data.paymentReference ? new Date() : null,
+            status: data.submit ? 'SUBMITTED' : 'DRAFT',
+            submittedAt: data.submit ? new Date() : null,
+            reviewHistory: data.submit
+              ? {
+                  create: {
+                    actorId: req.user.id,
+                    action: 'SUBMITTED',
+                    toStatus: 'SUBMITTED',
+                  },
+                }
+              : undefined,
+          },
+          include: { form: true, geoUnit: true },
+        })
+
+        if (movedImages.length) {
+          await tx.uploadedDocument.createMany({
+            data: movedImages.map((m) => ({
+              submissionId: created.id,
+              fieldKey: m.field,
+              originalName: m.originalName,
+              storedName: m.storedName,
+              mimeType: m.mimeType,
+              sizeBytes: m.sizeBytes,
+              path: m.path,
+            })),
+          })
+        }
+        return created
+      })
+      res.status(201).json({ submission })
+    } catch (error) {
+      await removeSubmissionFolder(applicationNo)
+      throw error
+    }
   } catch (error) {
     next(error)
   }
@@ -224,30 +297,70 @@ async function reviseSubmission(req, res, next) {
       return res.status(400).json({ message: 'This application cannot be edited in the current status' })
     }
 
+    const movedImages = []
+    let applicantData = data.applicantData || submission.applicantData
+    for (const image of data.images || []) {
+      const moved = await moveImageToSubmission(image, submission.applicationNo)
+      movedImages.push(moved)
+      applicantData = { ...applicantData, [moved.field]: moved.path }
+    }
+
     const nextStatus = data.submit ? (submission.status === 'DRAFT' ? 'SUBMITTED' : 'RESUBMITTED') : 'DRAFT'
     const nextPaymentReference = data.paymentReference ?? submission.paymentReference
-    const updated = await prisma.applicationSubmission.update({
-      where: { id },
-      data: {
-        applicantData: data.applicantData || submission.applicantData,
-        paymentData: data.paymentData || submission.paymentData,
-        paymentReference: nextPaymentReference,
-        paymentStatus: nextPaymentReference ? 'PAID' : submission.paymentStatus,
-        paymentPaidAt: nextPaymentReference && !submission.paymentPaidAt ? new Date() : submission.paymentPaidAt,
-        status: nextStatus,
-        submittedAt: data.submit ? new Date() : submission.submittedAt,
-        currentReviewReason: data.submit ? null : submission.currentReviewReason,
-        revisionCount: data.submit && submission.status !== 'DRAFT' ? { increment: 1 } : undefined,
-        reviewHistory: {
-          create: {
-            actorId: req.user.id,
-            action: data.submit ? (submission.status === 'DRAFT' ? 'SUBMITTED' : 'RESUBMITTED') : 'UPDATED',
-            fromStatus: submission.status,
-            toStatus: nextStatus,
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.applicationSubmission.update({
+        where: { id },
+        data: {
+          applicantData,
+          paymentData: data.paymentData || submission.paymentData,
+          paymentReference: nextPaymentReference,
+          paymentStatus: nextPaymentReference ? 'PAID' : submission.paymentStatus,
+          paymentPaidAt: nextPaymentReference && !submission.paymentPaidAt ? new Date() : submission.paymentPaidAt,
+          status: nextStatus,
+          submittedAt: data.submit ? new Date() : submission.submittedAt,
+          currentReviewReason: data.submit ? null : submission.currentReviewReason,
+          revisionCount: data.submit && submission.status !== 'DRAFT' ? { increment: 1 } : undefined,
+          reviewHistory: {
+            create: {
+              actorId: req.user.id,
+              action: data.submit ? (submission.status === 'DRAFT' ? 'SUBMITTED' : 'RESUBMITTED') : 'UPDATED',
+              fromStatus: submission.status,
+              toStatus: nextStatus,
+            },
           },
         },
-      },
-      include: { form: true, geoUnit: true, reviewHistory: { orderBy: { createdAt: 'desc' }, take: 5 } },
+        include: { form: true, geoUnit: true, reviewHistory: { orderBy: { createdAt: 'desc' }, take: 5 } },
+      })
+
+      if (movedImages.length) {
+        const oldDocs = await tx.uploadedDocument.findMany({
+          where: { submissionId: id, fieldKey: { in: movedImages.map((m) => m.field) } },
+        })
+        await tx.uploadedDocument.deleteMany({
+          where: { submissionId: id, fieldKey: { in: movedImages.map((m) => m.field) } },
+        })
+        await tx.uploadedDocument.createMany({
+          data: movedImages.map((m) => ({
+            submissionId: id,
+            fieldKey: m.field,
+            originalName: m.originalName,
+            storedName: m.storedName,
+            mimeType: m.mimeType,
+            sizeBytes: m.sizeBytes,
+            path: m.path,
+          })),
+        })
+        for (const old of oldDocs) {
+          if (!old.path.startsWith('/uploads/applications/')) continue
+          const applicationsRoot = path.resolve(uploadDir, 'applications')
+          const isInSubmissionFolder = old.path.startsWith(`/uploads/applications/${submission.applicationNo}/`)
+          const target = isInSubmissionFolder
+            ? path.join(applicationsRoot, submission.applicationNo, path.basename(old.path))
+            : path.join(applicationsRoot, path.basename(old.path))
+          await fs.rm(target, { force: true }).catch(() => {})
+        }
+      }
+      return result
     })
 
     res.json({ submission: updated })
