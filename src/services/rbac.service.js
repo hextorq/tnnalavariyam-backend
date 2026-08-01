@@ -84,6 +84,7 @@ function requireRole(...roles) {
 function getVisibleSubmissionWhere(user) {
   if (!user) return { id: -1 }
   if (user.role === 'SUPER_ADMIN') return {}
+  if (user.role === 'STATE_ADMIN' && !user.scopeId) return {}
   if (!isAdminRole(user.role)) return { userId: user.id }
   if (!user.scope) return { id: -1 }
 
@@ -98,6 +99,7 @@ function getVisibleSubmissionWhere(user) {
 function getVisibleScopeWhere(user) {
   if (!user) return { id: -1 }
   if (user.role === 'SUPER_ADMIN') return {}
+  if (user.role === 'STATE_ADMIN' && !user.scopeId) return {}
   if (!isAdminRole(user.role) || !user.scope) return { id: -1 }
 
   return {
@@ -111,6 +113,7 @@ function getVisibleScopeWhere(user) {
 function getVisibleSignupWhere(user) {
   if (!user) return { id: -1 }
   if (user.role === 'SUPER_ADMIN') return {}
+  if (user.role === 'STATE_ADMIN' && !user.scopeId) return {}
   if (!isAdminRole(user.role) || !user.scope) return { id: -1 }
 
   return {
