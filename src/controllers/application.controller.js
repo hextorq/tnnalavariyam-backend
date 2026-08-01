@@ -191,6 +191,26 @@ async function createSubmission(req, res, next) {
     }
 
     try {
+      const isSubmitting = !!data.submit
+      let status = isSubmitting ? 'SUBMITTED' : 'DRAFT'
+      let currentReviewLevel = 1
+      const historyEntries = isSubmitting
+        ? [{ actorId: req.user.id, action: 'SUBMITTED', toStatus: 'SUBMITTED' }]
+        : []
+
+      const creatorLevel = getReviewLevelForRole(req.user.role)
+      if (isSubmitting && creatorLevel) {
+        if (creatorLevel >= 4) {
+          status = 'APPROVED'
+          currentReviewLevel = 4
+          historyEntries.push({ actorId: req.user.id, action: 'APPROVED', toStatus: 'APPROVED' })
+        } else {
+          status = getForwardStatusForLevel(creatorLevel + 1)
+          currentReviewLevel = creatorLevel + 1
+          historyEntries.push({ actorId: req.user.id, action: 'APPROVED', toStatus: status })
+        }
+      }
+
       const submission = await prisma.$transaction(async (tx) => {
         const created = await tx.applicationSubmission.create({
           data: {
@@ -204,14 +224,13 @@ async function createSubmission(req, res, next) {
             paymentReference: data.paymentReference,
             paymentStatus: data.paymentReference ? 'PAID' : 'PENDING',
             paymentPaidAt: data.paymentReference ? new Date() : null,
-            status: data.submit ? 'SUBMITTED' : 'DRAFT',
-            submittedAt: data.submit ? new Date() : null,
-            reviewHistory: data.submit
+            status,
+            currentReviewLevel,
+            submittedAt: isSubmitting ? new Date() : null,
+            reviewHistory: historyEntries.length
               ? {
-                  create: {
-                    actorId: req.user.id,
-                    action: 'SUBMITTED',
-                    toStatus: 'SUBMITTED',
+                  createMany: {
+                    data: historyEntries,
                   },
                 }
               : undefined,
