@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma')
 const { nodeEnv } = require('../config/env')
+const { migrationState } = require('../utils/legacyImageMigration')
 
 const requiredTables = [
   'ApplicationForm',
@@ -59,6 +60,7 @@ async function healthCheck(req, res) {
     timestamp: new Date().toISOString(),
     durationMs: Date.now() - startedAt,
     checks,
+    legacyImageMigration: migrationState,
   })
 }
 

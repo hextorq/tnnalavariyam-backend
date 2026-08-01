@@ -130,6 +130,17 @@ async function listForms(req, res) {
   res.json({ forms: applicationForms })
 }
 
+function sanitizeApplicantDataForResponse(applicantData) {
+  if (!applicantData || typeof applicantData !== 'object') return applicantData || {}
+  const cleaned = { ...applicantData }
+  for (const [key, value] of Object.entries(cleaned)) {
+    if (typeof value === 'string' && value.startsWith('data:image/')) {
+      cleaned[key] = null
+    }
+  }
+  return cleaned
+}
+
 async function listSubmissions(req, res, next) {
   try {
     const submissions = await prisma.applicationSubmission.findMany({
@@ -143,6 +154,9 @@ async function listSubmissions(req, res, next) {
         documents: { orderBy: { createdAt: 'asc' } },
       },
     })
+    for (const submission of submissions) {
+      submission.applicantData = sanitizeApplicantDataForResponse(submission.applicantData)
+    }
     res.json({ submissions })
   } catch (error) {
     next(error)
