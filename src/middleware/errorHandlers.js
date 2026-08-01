@@ -7,6 +7,11 @@ function errorHandler(error, req, res, next) {
     return res.status(400).json({ message: 'Validation failed', issues: error.issues })
   }
 
+  const statusCode = error.statusCode || error.status
+  if (statusCode && statusCode < 500) {
+    return res.status(statusCode).json({ message: error.message })
+  }
+
   console.error(error)
   const detail =
     process.env.NODE_ENV === 'production'

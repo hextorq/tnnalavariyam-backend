@@ -10,6 +10,27 @@ const { jwtSecret, uploadDir } = require('../config/env')
 
 const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
 
+const MAX_INLINE_BASE64_BYTES = 1024 * 1024
+
+function assertNoLargeInlineImages(applicantData) {
+  if (!applicantData || typeof applicantData !== 'object') return
+  let totalBase64Length = 0
+  for (const value of Object.values(applicantData)) {
+    if (typeof value === 'string' && value.startsWith('data:image/')) {
+      totalBase64Length += value.length
+    }
+  }
+  if (totalBase64Length > MAX_INLINE_BASE64_BYTES) {
+    const error = new Error(
+      `Inline base64 images detected (~${Math.round(totalBase64Length / 1024)} KB). ` +
+        'Images must be uploaded via POST /applications/uploads/temp and referenced by path. ' +
+        'If you see this, hard-refresh the page (Ctrl+Shift+R) to get the updated form.'
+    )
+    error.statusCode = 400
+    throw error
+  }
+}
+
 const applicationImageSchema = z.object({
   field: z.string().min(1),
   path: z.string().min(1),
@@ -133,6 +154,7 @@ async function createSubmission(req, res, next) {
     const data = submissionSchema.parse(req.body)
     const form = await ensureFormExists(data.formKey)
     if (!form || !form.isActive) return res.status(400).json({ message: 'Application form not found or inactive' })
+    assertNoLargeInlineImages(data.applicantData)
 
     const applicationNo = `TNW-${Date.now()}-${req.user.id}`
     const paymentAmount = form.feeAmount ? Number(form.feeAmount) : null
@@ -296,6 +318,7 @@ async function reviseSubmission(req, res, next) {
     if (!['DRAFT', 'NEEDS_CORRECTION', 'REJECTED'].includes(submission.status)) {
       return res.status(400).json({ message: 'This application cannot be edited in the current status' })
     }
+    assertNoLargeInlineImages(data.applicantData)
 
     const movedImages = []
     let applicantData = data.applicantData || submission.applicantData
