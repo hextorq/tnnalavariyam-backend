@@ -4,7 +4,13 @@ const { z } = require('zod')
 const fs = require('fs')
 const fsp = fs.promises
 const path = require('path')
-const { getVisibleSubmissionWhere, isAdminRole } = require('../services/rbac.service')
+const {
+  getForwardStatusForLevel,
+  getReviewLevelForRole,
+  getVisibleSubmissionWhere,
+  isAdminRole,
+  isFinalReviewLevel,
+} = require('../services/rbac.service')
 const jwt = require('jsonwebtoken')
 const { jwtSecret, uploadDir } = require('../config/env')
 
@@ -71,6 +77,9 @@ const reviewActionByStatus = {
   NEEDS_CORRECTION: 'CORRECTION_REQUESTED',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
+  FORWARDED_TO_TALUK: 'FORWARDED_TO_TALUK',
+  FORWARDED_TO_DISTRICT: 'FORWARDED_TO_DISTRICT',
+  FORWARDED_TO_STATE: 'FORWARDED_TO_STATE',
 }
 
 async function ensureFormExists(key) {
@@ -420,20 +429,41 @@ async function reviewSubmission(req, res, next) {
       where: { AND: [{ id }, getVisibleSubmissionWhere(req.user)] },
     })
     if (!submission) return res.status(404).json({ message: 'Application not found in your hierarchy scope' })
+    if (submission.userId === req.user.id) {
+      return res.status(403).json({ message: 'You cannot review your own application' })
+    }
+
+    const reviewerLevel = getReviewLevelForRole(req.user.role)
+    if (req.user.role !== 'SUPER_ADMIN' && reviewerLevel !== submission.currentReviewLevel) {
+      return res.status(403).json({ message: 'This application is awaiting action at another review level' })
+    }
+
+    let nextStatus = data.status
+    let nextLevel = submission.currentReviewLevel
+
+    if (data.status === 'APPROVED') {
+      if (isFinalReviewLevel(submission.currentReviewLevel)) {
+        nextStatus = 'APPROVED'
+      } else {
+        nextLevel = submission.currentReviewLevel + 1
+        nextStatus = getForwardStatusForLevel(nextLevel)
+      }
+    }
 
     const updated = await prisma.applicationSubmission.update({
       where: { id },
       data: {
-        status: data.status,
-        currentReviewReason: ['NEEDS_CORRECTION', 'REJECTED'].includes(data.status) ? data.reason : null,
+        status: nextStatus,
+        currentReviewLevel: nextLevel,
+        currentReviewReason: ['NEEDS_CORRECTION', 'REJECTED'].includes(nextStatus) ? data.reason : null,
         lastReviewedById: req.user.id,
         lastReviewedAt: new Date(),
         reviewHistory: {
           create: {
             actorId: req.user.id,
-            action: reviewActionByStatus[data.status],
+            action: reviewActionByStatus[nextStatus],
             fromStatus: submission.status,
-            toStatus: data.status,
+            toStatus: nextStatus,
             reason: data.reason,
           },
         },

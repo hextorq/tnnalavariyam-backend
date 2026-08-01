@@ -121,6 +121,7 @@ model ApplicationSubmission {
   paymentReference String?
   paymentPaidAt   DateTime?
   currentReviewReason String?         @db.Text
+  currentReviewLevel  Int              @default(1)
   lastReviewedById Int?
   lastReviewedAt  DateTime?
   revisionCount   Int                  @default(0)
@@ -228,6 +229,9 @@ enum ApplicationStatus {
   UNDER_REVIEW
   NEEDS_CORRECTION
   RESUBMITTED
+  FORWARDED_TO_TALUK
+  FORWARDED_TO_DISTRICT
+  FORWARDED_TO_STATE
   APPROVED
   REJECTED
 }
@@ -240,6 +244,9 @@ enum ReviewAction {
   RESUBMITTED
   APPROVED
   REJECTED
+  FORWARDED_TO_TALUK
+  FORWARDED_TO_DISTRICT
+  FORWARDED_TO_STATE
 }
 
 enum PaymentStatus {

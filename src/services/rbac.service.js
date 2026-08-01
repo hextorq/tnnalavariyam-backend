@@ -21,6 +21,45 @@ function isAdminRole(role) {
   return !['PARTNER', 'CITIZEN'].includes(role)
 }
 
+// Review pipeline levels: 1 = Village, 2 = Taluk, 3 = District, 4 = State (final).
+const reviewLevelByRole = {
+  VILLAGE_ADMIN: 1,
+  TALUK_ADMIN: 2,
+  DISTRICT_ADMIN: 3,
+  STATE_ADMIN: 4,
+  SUPER_ADMIN: 4,
+}
+
+const forwardStatusByLevel = {
+  2: 'FORWARDED_TO_TALUK',
+  3: 'FORWARDED_TO_DISTRICT',
+  4: 'FORWARDED_TO_STATE',
+}
+
+function getReviewLevelForRole(role) {
+  return reviewLevelByRole[role] || null
+}
+
+function isFinalReviewLevel(level) {
+  return level >= 4
+}
+
+function getForwardStatusForLevel(level) {
+  return forwardStatusByLevel[level] || null
+}
+
+// Statuses that require action at each level of the pipeline.
+const actionableStatusesByLevel = {
+  1: ['SUBMITTED', 'RESUBMITTED', 'UNDER_REVIEW'],
+  2: ['FORWARDED_TO_TALUK'],
+  3: ['FORWARDED_TO_DISTRICT'],
+  4: ['FORWARDED_TO_STATE'],
+}
+
+function getActionableStatusesForLevel(level) {
+  return actionableStatusesByLevel[level] || []
+}
+
 function getRoleScopeType(role) {
   return roleScopeType[role] || null
 }
@@ -112,12 +151,16 @@ function validateRoleScope(role, scopeType) {
 module.exports = {
   assertCanAssignRole,
   assertCanApproveSignup,
+  getActionableStatusesForLevel,
   getCreatableRoles,
+  getForwardStatusForLevel,
+  getReviewLevelForRole,
   getRoleScopeType,
   getVisibleScopeWhere,
   getVisibleSignupWhere,
   getVisibleSubmissionWhere,
   isAdminRole,
+  isFinalReviewLevel,
   requireRole,
   roleRank,
   validateRoleScope,
