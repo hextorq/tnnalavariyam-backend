@@ -18,6 +18,18 @@ const phoneSchema = z.string().regex(/^\d{10}$/, 'Phone number must be exactly 1
 
 const MAX_INLINE_BASE64_BYTES = 1024 * 1024
 
+const geoHierarchyInclude = {
+  parent: {
+    include: {
+      parent: {
+        include: {
+          parent: true,
+        },
+      },
+    },
+  },
+}
+
 function assertNoLargeInlineImages(applicantData) {
   if (!applicantData || typeof applicantData !== 'object') return
   let totalBase64Length = 0
@@ -157,9 +169,9 @@ async function listSubmissions(req, res, next) {
       orderBy: { createdAt: 'desc' },
       include: {
         form: true,
-        geoUnit: true,
+        geoUnit: { include: geoHierarchyInclude },
         lastReviewedBy: { select: { id: true, username: true, role: true } },
-        user: { select: { id: true, username: true, firstName: true, lastName: true, phone: true, role: true } },
+        user: { select: { id: true, username: true, firstName: true, lastName: true, phone: true, role: true, scope: true } },
         documents: { orderBy: { createdAt: 'asc' } },
       },
     })
@@ -489,8 +501,8 @@ async function reviewSubmission(req, res, next) {
       },
       include: {
         form: true,
-        geoUnit: true,
-        user: { select: { id: true, username: true, firstName: true, lastName: true, phone: true } },
+        geoUnit: { include: geoHierarchyInclude },
+        user: { select: { id: true, username: true, firstName: true, lastName: true, phone: true, role: true, scope: true } },
         reviewHistory: { orderBy: { createdAt: 'desc' }, take: 5 },
       },
     })
