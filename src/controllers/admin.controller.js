@@ -183,7 +183,10 @@ function addStatusCount(target, status, count = 1) {
 }
 
 function getNodeLabel(node) {
-  return node?.tamilName ? `${node.tamilName} / ${node.name}` : node?.name || ''
+  const tamilName = String(node?.tamilName || '').trim()
+  const name = String(node?.name || '').trim()
+  if (tamilName && name && tamilName !== name) return `${tamilName} / ${name}`
+  return tamilName || name
 }
 
 function sortByName(a, b) {
