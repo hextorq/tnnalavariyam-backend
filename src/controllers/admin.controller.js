@@ -168,6 +168,218 @@ async function getAdminOverview(req, res, next) {
   }
 }
 
+function emptyHierarchyCounts() {
+  return {
+    applications: { total: 0, byStatus: {} },
+    signupRequests: { total: 0, byStatus: {} },
+    users: { total: 0, active: 0, partners: 0 },
+  }
+}
+
+function addStatusCount(target, status, count = 1) {
+  const key = status || 'UNKNOWN'
+  target.total += count
+  target.byStatus[key] = (target.byStatus[key] || 0) + count
+}
+
+function getNodeLabel(node) {
+  return node?.tamilName ? `${node.tamilName} / ${node.name}` : node?.name || ''
+}
+
+function sortByName(a, b) {
+  return getNodeLabel(a).localeCompare(getNodeLabel(b), 'ta')
+}
+
+function isSameOrDescendant(scope, ancestor) {
+  if (!scope || !ancestor) return false
+  return scope.id === ancestor.id || scope.path.startsWith(`${ancestor.path}${ancestor.id}/`)
+}
+
+function getFirstHierarchyType(user) {
+  if (user.role === 'SUPER_ADMIN' || user.role === 'STATE_ADMIN') return 'DISTRICT'
+  if (user.role === 'DISTRICT_ADMIN') return 'TALUK'
+  if (user.role === 'TALUK_ADMIN') return 'VILLAGE'
+  if (user.role === 'VILLAGE_ADMIN') return 'VILLAGE'
+  return null
+}
+
+async function getHierarchyApplications(req, res, next) {
+  try {
+    const scopeWhere = getVisibleScopeWhere(req.user)
+    const submissionWhere = getVisibleSubmissionWhere(req.user)
+    const signupWhere = getVisibleSignupWhere(req.user)
+
+    const geoUnits = await prisma.geoUnit.findMany({
+      where: scopeWhere,
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, tamilName: true, type: true, parentId: true, path: true },
+    })
+
+    const geoIds = geoUnits.map((unit) => unit.id)
+    const userWhere = geoIds.length ? { scopeId: { in: geoIds } } : { id: -1 }
+
+    const [submissions, signupRequests, users] = await Promise.all([
+      prisma.applicationSubmission.findMany({
+        where: submissionWhere,
+        select: {
+          id: true,
+          applicationNo: true,
+          status: true,
+          geoUnitId: true,
+          userId: true,
+          createdAt: true,
+          updatedAt: true,
+          form: { select: { title: true, tamilTitle: true } },
+          user: { select: { id: true, username: true, firstName: true, phone: true, role: true, scopeId: true } },
+        },
+      }),
+      prisma.userSignupRequest.findMany({
+        where: signupWhere,
+        select: { id: true, status: true, requestedRole: true, scopeId: true },
+      }),
+      prisma.user.findMany({
+        where: userWhere,
+        orderBy: [{ role: 'asc' }, { username: 'asc' }],
+        select: { id: true, username: true, firstName: true, phone: true, role: true, isActive: true, lastLoginAt: true, scopeId: true },
+      }),
+    ])
+
+    const nodeMap = new Map()
+    for (const unit of geoUnits) {
+      nodeMap.set(unit.id, {
+        ...unit,
+        label: getNodeLabel(unit),
+        counts: emptyHierarchyCounts(),
+        children: [],
+        partners: [],
+        recentApplications: [],
+      })
+    }
+
+    for (const node of nodeMap.values()) {
+      if (node.parentId && nodeMap.has(node.parentId)) {
+        nodeMap.get(node.parentId).children.push(node)
+      }
+    }
+
+    const directSubmissionsByScope = new Map()
+    for (const submission of submissions) {
+      if (!submission.geoUnitId || !nodeMap.has(submission.geoUnitId)) continue
+      const items = directSubmissionsByScope.get(submission.geoUnitId) || []
+      items.push(submission)
+      directSubmissionsByScope.set(submission.geoUnitId, items)
+    }
+
+    const directSignupsByScope = new Map()
+    for (const request of signupRequests) {
+      if (!request.scopeId || !nodeMap.has(request.scopeId)) continue
+      const items = directSignupsByScope.get(request.scopeId) || []
+      items.push(request)
+      directSignupsByScope.set(request.scopeId, items)
+    }
+
+    const usersByScope = new Map()
+    for (const user of users) {
+      if (!user.scopeId || !nodeMap.has(user.scopeId)) continue
+      const items = usersByScope.get(user.scopeId) || []
+      items.push(user)
+      usersByScope.set(user.scopeId, items)
+    }
+
+    for (const node of nodeMap.values()) {
+      const nodeSubmissions = directSubmissionsByScope.get(node.id) || []
+      for (const submission of nodeSubmissions) {
+        addStatusCount(node.counts.applications, submission.status)
+      }
+
+      const nodeSignups = directSignupsByScope.get(node.id) || []
+      for (const request of nodeSignups) {
+        addStatusCount(node.counts.signupRequests, request.status)
+      }
+
+      const nodeUsers = usersByScope.get(node.id) || []
+      for (const user of nodeUsers) {
+        node.counts.users.total += 1
+        if (user.isActive) node.counts.users.active += 1
+        if (user.role === 'PARTNER') node.counts.users.partners += 1
+      }
+
+      if (node.type === 'VILLAGE') {
+        node.partners = nodeUsers
+          .filter((user) => user.role === 'PARTNER')
+          .map((partner) => {
+            const partnerSubmissions = submissions.filter((submission) => submission.userId === partner.id)
+            const counts = { total: 0, byStatus: {} }
+            for (const submission of partnerSubmissions) addStatusCount(counts, submission.status)
+            return {
+              id: partner.id,
+              username: partner.username,
+              name: partner.firstName || partner.username,
+              phone: partner.phone,
+              isActive: partner.isActive,
+              lastLoginAt: partner.lastLoginAt,
+              applications: counts,
+            }
+          })
+          .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      }
+
+      node.recentApplications = nodeSubmissions
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+        .slice(0, 5)
+    }
+
+    const orderedNodes = [...nodeMap.values()].sort((a, b) => b.path.length - a.path.length)
+    for (const node of orderedNodes) {
+      if (!node.parentId || !nodeMap.has(node.parentId)) continue
+      const parent = nodeMap.get(node.parentId)
+      for (const [status, count] of Object.entries(node.counts.applications.byStatus)) {
+        addStatusCount(parent.counts.applications, status, count)
+      }
+      for (const [status, count] of Object.entries(node.counts.signupRequests.byStatus)) {
+        addStatusCount(parent.counts.signupRequests, status, count)
+      }
+      parent.counts.users.total += node.counts.users.total
+      parent.counts.users.active += node.counts.users.active
+      parent.counts.users.partners += node.counts.users.partners
+    }
+
+    for (const node of nodeMap.values()) {
+      node.children.sort(sortByName)
+      node.childCount = node.children.length
+    }
+
+    const firstType = getFirstHierarchyType(req.user)
+    const scopedRoots = firstType
+      ? [...nodeMap.values()].filter((node) => {
+          if (node.type !== firstType) return false
+          if (req.user.role === 'VILLAGE_ADMIN') return node.id === req.user.scopeId
+          if (!req.user.scope) return true
+          return isSameOrDescendant(node, req.user.scope)
+        })
+      : []
+
+    const roots = (scopedRoots.length ? scopedRoots : [...nodeMap.values()].filter((node) => !node.parentId || !nodeMap.has(node.parentId))).sort(sortByName)
+
+    res.json({
+      hierarchy: {
+        role: req.user.role,
+        scope: req.user.scope || null,
+        firstType,
+        total: {
+          geoUnits: geoUnits.length,
+          applications: submissions.length,
+          signupRequests: signupRequests.length,
+          partners: users.filter((user) => user.role === 'PARTNER').length,
+        },
+        roots,
+      },
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function createUser(req, res, next) {
   try {
     const data = createUserSchema.parse(req.body)
@@ -279,4 +491,4 @@ async function updateUserLoginStatus(req, res, next) {
   }
 }
 
-module.exports = { createUser, getAdminOverview, updateUserLoginStatus }
+module.exports = { createUser, getAdminOverview, getHierarchyApplications, updateUserLoginStatus }
