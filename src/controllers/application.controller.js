@@ -9,7 +9,6 @@ const {
   getReviewLevelForRole,
   getVisibleSubmissionWhere,
   isAdminRole,
-  isFinalReviewLevel,
 } = require('../services/rbac.service')
 const jwt = require('jsonwebtoken')
 const { jwtSecret, uploadDir } = require('../config/env')
@@ -80,7 +79,15 @@ const revisionSchema = z.object({
 })
 
 const reviewSchema = z.object({
-  status: z.enum(['UNDER_REVIEW', 'NEEDS_CORRECTION', 'APPROVED', 'REJECTED']),
+  status: z.enum([
+    'UNDER_REVIEW',
+    'NEEDS_CORRECTION',
+    'APPROVED',
+    'REJECTED',
+    'FORWARDED_TO_TALUK',
+    'FORWARDED_TO_DISTRICT',
+    'FORWARDED_TO_STATE',
+  ]),
   reason: z.string().optional(),
 })
 
@@ -473,12 +480,24 @@ async function reviewSubmission(req, res, next) {
     let nextLevel = submission.currentReviewLevel
 
     if (data.status === 'APPROVED') {
-      if (isFinalReviewLevel(submission.currentReviewLevel)) {
-        nextStatus = 'APPROVED'
-      } else {
-        nextLevel = submission.currentReviewLevel + 1
-        nextStatus = getForwardStatusForLevel(nextLevel)
+      // Any higher hierarchy admin's approval is final — the application does
+      // not need to pass level by level anymore.
+      nextStatus = 'APPROVED'
+      nextLevel = 4
+    }
+
+    const forwardedStatusLevel = {
+      FORWARDED_TO_TALUK: 2,
+      FORWARDED_TO_DISTRICT: 3,
+      FORWARDED_TO_STATE: 4,
+    }[data.status]
+    if (forwardedStatusLevel) {
+      // Forwarding is optional; it can only move one level up at a time.
+      if (forwardedStatusLevel !== submission.currentReviewLevel + 1) {
+        return res.status(400).json({ message: 'Application can only be forwarded one level up at a time' })
       }
+      nextStatus = data.status
+      nextLevel = forwardedStatusLevel
     }
 
     const updated = await prisma.applicationSubmission.update({
