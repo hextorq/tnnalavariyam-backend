@@ -383,6 +383,32 @@ async function getHierarchyApplications(req, res, next) {
   }
 }
 
+async function listUsers(req, res, next) {
+  try {
+    const users = await prisma.user.findMany({
+      where: getVisibleUserWhere(req.user),
+      orderBy: [{ role: 'asc' }, { username: 'asc' }],
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        phone: true,
+        firstName: true,
+        lastName: true,
+        name: true,
+        role: true,
+        isActive: true,
+        lastLoginAt: true,
+        createdAt: true,
+        scope: { select: { id: true, name: true, type: true } },
+      },
+    })
+    res.json({ users })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function createUser(req, res, next) {
   try {
     const data = createUserSchema.parse(req.body)
@@ -494,4 +520,4 @@ async function updateUserLoginStatus(req, res, next) {
   }
 }
 
-module.exports = { createUser, getAdminOverview, getHierarchyApplications, updateUserLoginStatus }
+module.exports = { createUser, getAdminOverview, getHierarchyApplications, listUsers, updateUserLoginStatus }

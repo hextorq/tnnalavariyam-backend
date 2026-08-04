@@ -698,8 +698,19 @@ async function login(req, res, next) {
       },
     })
 
-    if (!user || !user.isActive || !(await bcrypt.compare(data.password, user.passwordHash))) {
+    if (!user) {
       return res.status(401).json({ message: 'Invalid credentials or account not approved yet' })
+    }
+
+    if (!(await bcrypt.compare(data.password, user.passwordHash))) {
+      return res.status(401).json({ message: 'Invalid credentials or account not approved yet' })
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        message:
+          'Your account has been disabled by the administrator. Please contact the admin / உங்கள் கணக்கு நிர்வாகியால் முடக்கப்பட்டுள்ளது. நிர்வாகியை தொடர்பு கொள்ளவும்.',
+      })
     }
 
     try {
