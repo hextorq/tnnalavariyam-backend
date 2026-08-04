@@ -1,5 +1,6 @@
 const express = require('express')
 const {
+  changePassword,
   checkSignupAvailability,
   deleteSignupTemp,
   getMe,
@@ -8,6 +9,7 @@ const {
   requestSignup,
   reviewSignupRequest,
   trackSignupRequest,
+  updateProfile,
   uploadSignupTemp,
 } = require('../controllers/auth.controller')
 const { authenticate } = require('../middleware/auth')
@@ -17,6 +19,8 @@ const { requireRole } = require('../services/rbac.service')
 const router = express.Router()
 
 router.get('/me', authenticate, getMe)
+router.patch('/profile', authenticate, updateProfile)
+router.patch('/profile/password', authenticate, changePassword)
 router.get('/availability', checkSignupAvailability)
 router.post('/uploads/signup-temp', uploadSignupTempFile, uploadSignupTemp)
 router.delete('/uploads/signup-temp', deleteSignupTemp)

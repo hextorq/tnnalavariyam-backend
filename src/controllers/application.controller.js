@@ -108,14 +108,13 @@ async function ensureFormExists(key) {
       key,
       title: key,
       tamilTitle: key,
-      feeAmount: 150,
     }
     form = await prisma.applicationForm.create({
       data: {
         key: catalogItem.key,
         title: catalogItem.title,
         tamilTitle: catalogItem.tamilTitle,
-        feeAmount: catalogItem.feeAmount ? Number(catalogItem.feeAmount) : null,
+        feeAmount: null,
         isActive: true,
       },
     })

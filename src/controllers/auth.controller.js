@@ -71,6 +71,26 @@ const signupReviewSchema = z.object({
   reason: z.string().optional(),
 })
 
+const updateProfileSchema = z.object({
+  fullName: z.string().min(2).optional(),
+  phone: phoneSchema.optional(),
+  addressLine: z.string().min(5).optional(),
+  state: z.string().min(1).optional(),
+  district: z.string().min(1).optional(),
+  taluk: z.string().optional(),
+  village: z.string().optional(),
+  pincode: pincodeSchema.optional(),
+})
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
+  confirmPassword: z.string().min(1),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+})
+
 function splitName(fullName) {
   const parts = fullName.trim().split(/\s+/)
   return {
@@ -542,7 +562,16 @@ async function resolveUserGeoHierarchy(userId) {
         { phone: user.phone },
       ],
     },
-    select: { photoPath: true, state: true, district: true, taluk: true, village: true },
+    select: {
+      photoPath: true,
+      fullName: true,
+      addressLine: true,
+      pincode: true,
+      state: true,
+      district: true,
+      taluk: true,
+      village: true,
+    },
   })
 
   let state = signupReq?.state || 'Tamil Nadu'
@@ -575,11 +604,78 @@ async function resolveUserGeoHierarchy(userId) {
     role: user.role,
     scopeId: user.scopeId,
     photoPath,
+    fullName: signupReq?.fullName || user.name || '',
+    addressLine: signupReq?.addressLine || '',
+    pincode: signupReq?.pincode || '',
     state: state || 'Tamil Nadu',
     district: district || (user.role === 'SUPER_ADMIN' ? 'All Districts' : 'Assigned District'),
     taluk: taluk || (['SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN'].includes(user.role) ? 'All Taluks' : 'Assigned Taluk'),
     village: village || (['SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN'].includes(user.role) ? 'All Villages' : 'Assigned Village'),
     scope: user.scope,
+  }
+}
+
+async function updateProfile(req, res, next) {
+  try {
+    const data = updateProfileSchema.parse(req.body)
+    if (!Object.keys(data).length) {
+      return res.status(400).json({ message: 'No profile fields provided to update' })
+    }
+
+    if (data.phone) {
+      const phoneClash = await prisma.user.findFirst({
+        where: { phone: data.phone, NOT: { id: req.user.id } },
+        select: { id: true },
+      })
+      if (phoneClash) return res.status(409).json({ message: 'Phone number is already used by another account' })
+    }
+
+    const { fullName, ...rest } = data
+    const userUpdate = {}
+    if (fullName) {
+      const name = splitName(fullName)
+      userUpdate.name = fullName
+      userUpdate.firstName = name.firstName
+      userUpdate.lastName = name.lastName
+    }
+    if (rest.phone) userUpdate.phone = rest.phone
+    await prisma.user.update({ where: { id: req.user.id }, data: userUpdate })
+
+    const signupUpdate = { ...rest }
+    if (fullName) signupUpdate.fullName = fullName
+    await prisma.userSignupRequest.updateMany({
+      where: { OR: [{ approvedUserId: req.user.id }, { username: req.user.username }] },
+      data: signupUpdate,
+    })
+
+    const userPayload = await resolveUserGeoHierarchy(req.user.id)
+    res.json({ message: 'Profile updated successfully / சுயவிவரம் புதுப்பிக்கப்பட்டது', user: userPayload })
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function changePassword(req, res, next) {
+  try {
+    const data = changePasswordSchema.parse(req.body)
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } })
+    if (!user || !(await bcrypt.compare(data.currentPassword, user.passwordHash))) {
+      return res.status(400).json({ message: 'Current password is incorrect / தற்போதைய கடவுச்சொல் தவறானது' })
+    }
+    if (data.currentPassword === data.newPassword) {
+      return res.status(400).json({ message: 'New password must be different from the current password' })
+    }
+
+    const passwordHash = await bcrypt.hash(data.newPassword, 12)
+    await prisma.user.update({ where: { id: req.user.id }, data: { passwordHash } })
+    await prisma.userSignupRequest.updateMany({
+      where: { OR: [{ approvedUserId: req.user.id }, { username: user.username }] },
+      data: { passwordHash },
+    })
+
+    res.json({ message: 'Password changed successfully / கடவுச்சொல் மாற்றப்பட்டது' })
+  } catch (error) {
+    next(error)
   }
 }
 
@@ -639,6 +735,7 @@ async function login(req, res, next) {
 }
 
 module.exports = {
+  changePassword,
   checkSignupAvailability,
   deleteSignupTemp,
   getMe,
@@ -647,5 +744,6 @@ module.exports = {
   requestSignup,
   reviewSignupRequest,
   trackSignupRequest,
+  updateProfile,
   uploadSignupTemp,
 }
