@@ -347,6 +347,7 @@ async function trackSubmission(req, res, next) {
         applicationNo: submission.applicationNo,
         formTitle: submission.form.title,
         tamilFormTitle: submission.form.tamilTitle,
+        applicationType: applicantData?.customData?.applicationType || null,
         applicantName,
         scope: submission.geoUnit?.name || null,
         status: submission.status,

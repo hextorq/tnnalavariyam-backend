@@ -232,6 +232,7 @@ async function getHierarchyApplications(req, res, next) {
           userId: true,
           createdAt: true,
           updatedAt: true,
+          applicantData: true,
           form: { select: { title: true, tamilTitle: true } },
           user: { select: { id: true, username: true, firstName: true, phone: true, role: true, scopeId: true } },
         },
@@ -330,6 +331,15 @@ async function getHierarchyApplications(req, res, next) {
       node.recentApplications = nodeSubmissions
         .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
         .slice(0, 5)
+        .map((submission) => ({
+          id: submission.id,
+          applicationNo: submission.applicationNo,
+          status: submission.status,
+          updatedAt: submission.updatedAt,
+          form: submission.form,
+          user: submission.user,
+          applicationType: submission.applicantData?.customData?.applicationType || null,
+        }))
     }
 
     const orderedNodes = [...nodeMap.values()].sort((a, b) => b.path.length - a.path.length)
