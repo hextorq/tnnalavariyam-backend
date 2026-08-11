@@ -1,5 +1,6 @@
 const { z } = require('zod')
 const prisma = require('../config/prisma')
+const { isAdminRole } = require('../services/rbac.service')
 
 const billItemSchema = z.object({
   particulars: z.string().trim().min(1, 'Particulars is required'),
@@ -61,8 +62,25 @@ async function createBill(req, res, next) {
 
 async function listBills(req, res, next) {
   try {
+    const user = req.user
+
+    let where
+    if (user.role === 'SUPER_ADMIN' || (user.role === 'STATE_ADMIN' && !user.scopeId)) {
+      where = {}
+    } else if (isAdminRole(user.role) && user.scope) {
+      where = {
+        OR: [
+          { userId: user.id },
+          { user: { is: { scopeId: user.scopeId } } },
+          { user: { is: { scope: { is: { path: { startsWith: `${user.scope.path}${user.scope.id}/` } } } } } },
+        ],
+      }
+    } else {
+      where = { userId: user.id }
+    }
+
     const bills = await prisma.bill.findMany({
-      where: { userId: req.user.id },
+      where,
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -71,6 +89,19 @@ async function listBills(req, res, next) {
         items: true,
         totalAmount: true,
         createdAt: true,
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            role: true,
+            phone: true,
+            email: true,
+            addressLine: true,
+            pincode: true,
+            scope: { select: { id: true, name: true, tamilName: true, type: true, path: true } },
+          },
+        },
       },
     })
     res.json({ bills })
