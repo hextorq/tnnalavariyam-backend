@@ -103,7 +103,13 @@ async function listBills(req, res, next) {
         },
       },
     })
-    res.json({ bills })
+
+    const geoUnits = await prisma.geoUnit.findMany({
+      select: { id: true, name: true, tamilName: true, type: true, parentId: true, path: true },
+      orderBy: [{ type: 'asc' }, { name: 'asc' }],
+    })
+
+    res.json({ bills, geoUnits })
   } catch (error) {
     next(error)
   }
