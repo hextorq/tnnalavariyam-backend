@@ -735,7 +735,7 @@ async function login(req, res, next) {
     }
 
     const userPayload = await resolveUserGeoHierarchy(user.id)
-    const token = jwt.sign({ sub: user.id, role: user.role, scopeId: user.scopeId }, jwtSecret, { expiresIn: '7d' })
+    const token = jwt.sign({ sub: user.id, role: user.role, scopeId: user.scopeId }, jwtSecret, { expiresIn: '15m' })
     res.json({
       token,
       user: userPayload,
