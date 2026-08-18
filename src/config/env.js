@@ -7,9 +7,9 @@ for (const key of required) {
 }
 
 module.exports = {
-  port: Number(process.env.PORT || 4000),
+  port: Number(process.env.PORT || 3000),
   nodeEnv: process.env.NODE_ENV || 'development',
-  frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:5173',
+  frontendOrigin: process.env.FRONTEND_ORIGIN || 'https://tnnalavariyam.com/',
   jwtSecret: process.env.JWT_SECRET || 'dev-only-secret',
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
 }
