@@ -94,6 +94,7 @@ async function listBills(req, res, next) {
             id: true,
             username: true,
             firstName: true,
+            lastName: true,
             name: true,
             role: true,
             phone: true,
