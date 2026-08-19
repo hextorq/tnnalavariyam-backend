@@ -29,6 +29,7 @@ const createUserSchema = z.object({
 function getVisibleUserWhere(user) {
   if (!user) return { id: -1 }
   if (user.role === 'SUPER_ADMIN') return {}
+  if (user.role === 'STATE_ADMIN' && !user.scopeId) return {}
   if (!user.scope) return { id: -1 }
 
   return {
