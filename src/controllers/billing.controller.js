@@ -99,14 +99,14 @@ async function listBills(req, res, next) {
             role: true,
             phone: true,
             email: true,
-            scope: { select: { id: true, name: true, tamilName: true, type: true, path: true } },
+            scope: { select: { id: true, name: true, tamilName: true, englishName: true, type: true, path: true } },
           },
         },
       },
     })
 
     const geoUnits = await prisma.geoUnit.findMany({
-      select: { id: true, name: true, tamilName: true, type: true, parentId: true, path: true },
+      select: { id: true, name: true, tamilName: true, englishName: true, type: true, parentId: true, path: true },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     })
 

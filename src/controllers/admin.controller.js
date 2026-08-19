@@ -185,8 +185,10 @@ function addStatusCount(target, status, count = 1) {
 function getNodeLabel(node) {
   const tamilName = String(node?.tamilName || '').trim()
   const name = String(node?.name || '').trim()
-  if (tamilName && name && tamilName !== name) return `${tamilName} / ${name}`
-  return tamilName || name
+  const englishName = String(node?.englishName || '').trim()
+  const primary = englishName || name
+  if (tamilName && primary && tamilName !== primary) return `${tamilName} / ${primary}`
+  return tamilName || primary
 }
 
 function sortByName(a, b) {
@@ -215,7 +217,7 @@ async function getHierarchyApplications(req, res, next) {
     const geoUnits = await prisma.geoUnit.findMany({
       where: scopeWhere,
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
-      select: { id: true, name: true, tamilName: true, type: true, parentId: true, path: true },
+      select: { id: true, name: true, tamilName: true, englishName: true, type: true, parentId: true, path: true },
     })
 
     const geoIds = geoUnits.map((unit) => unit.id)
@@ -530,4 +532,47 @@ async function updateUserLoginStatus(req, res, next) {
   }
 }
 
-module.exports = { createUser, getAdminOverview, getHierarchyApplications, listUsers, updateUserLoginStatus }
+async function updateGeoUnitEnglishName(req, res, next) {
+  try {
+    const id = Number(req.params.id)
+    if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid geo unit id' })
+
+    const englishName = String(req.body?.englishName || '').trim()
+    if (!englishName) return res.status(400).json({ message: 'English name is required' })
+
+    const unit = await prisma.geoUnit.findUnique({ where: { id } })
+    if (!unit) return res.status(404).json({ message: 'Geo unit not found' })
+
+    if (req.user.role !== 'SUPER_ADMIN') {
+      const scopeWhere = getVisibleScopeWhere(req.user)
+      const visible = await prisma.geoUnit.count({
+        where: { AND: [scopeWhere, { id }] },
+      })
+      if (!visible) return res.status(403).json({ message: 'Scope access denied. You can only edit geo units inside your hierarchy scope' })
+    }
+
+    const updated = await prisma.geoUnit.update({
+      where: { id },
+      data: { englishName },
+      select: { id: true, name: true, tamilName: true, englishName: true, type: true, parentId: true, path: true },
+    })
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: req.user.id,
+          action: 'GEO_UNIT_ENGLISH_NAME_UPDATED',
+          metadata: { geoUnitId: id, type: unit.type, englishName },
+        },
+      })
+    } catch {
+      // Audit log fallback
+    }
+
+    res.json({ message: 'English name updated successfully', unit: updated })
+  } catch (error) {
+    next(error)
+  }
+}
+
+module.exports = { createUser, getAdminOverview, getHierarchyApplications, listUsers, updateGeoUnitEnglishName, updateUserLoginStatus }

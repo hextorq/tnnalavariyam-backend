@@ -80,6 +80,7 @@ model GeoUnit {
   id            Int                     @id @default(autoincrement())
   name          String
   tamilName     String?
+  englishName   String?
   type          GeoUnitType
   code          String?                 @unique
   parentId      Int?

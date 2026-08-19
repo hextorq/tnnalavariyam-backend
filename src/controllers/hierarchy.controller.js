@@ -1,7 +1,7 @@
 const { z } = require('zod')
 const prisma = require('../config/prisma')
 const tamilNaduHierarchy = require('../data/tamilNaduHierarchy.json')
-const { getCreatableRoles, getRoleScopeType } = require('../services/rbac.service')
+const { getCreatableRoles, getRoleScopeType, getVisibleScopeWhere } = require('../services/rbac.service')
 
 const geoUnitSchema = z.object({
   name: z.string().min(1),
@@ -20,6 +20,7 @@ const parentTypeByUnitType = {
 async function listGeoUnits(req, res, next) {
   try {
     const units = await prisma.geoUnit.findMany({
+      where: req.user ? getVisibleScopeWhere(req.user) : {},
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
       include: { parent: true },
     })

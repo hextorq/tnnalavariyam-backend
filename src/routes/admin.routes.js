@@ -1,5 +1,5 @@
 const express = require('express')
-const { createUser, getAdminOverview, getHierarchyApplications, listUsers, updateUserLoginStatus } = require('../controllers/admin.controller')
+const { createUser, getAdminOverview, getHierarchyApplications, listUsers, updateGeoUnitEnglishName, updateUserLoginStatus } = require('../controllers/admin.controller')
 const { authenticate } = require('../middleware/auth')
 const { requireRole } = require('../services/rbac.service')
 
@@ -10,5 +10,6 @@ router.get('/hierarchy-applications', authenticate, requireRole('SUPER_ADMIN', '
 router.get('/users', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN'), listUsers)
 router.post('/users', authenticate, requireRole('SUPER_ADMIN'), createUser)
 router.patch('/users/:id/login-status', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN'), updateUserLoginStatus)
+router.patch('/geo-units/:id/english-name', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN'), updateGeoUnitEnglishName)
 
 module.exports = router

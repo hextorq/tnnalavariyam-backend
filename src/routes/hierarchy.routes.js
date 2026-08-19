@@ -7,7 +7,7 @@ const router = express.Router()
 
 router.get('/options', getScopeOptions)
 router.get('/tamil-nadu', getTamilNaduHierarchy)
-router.get('/geo-units', authenticate, listGeoUnits)
+router.get('/geo-units', listGeoUnits)
 router.post('/geo-units', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN'), createGeoUnit)
 
 module.exports = router

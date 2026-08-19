@@ -1,0 +1,1 @@
+ALTER TABLE `GeoUnit` ADD COLUMN `englishName` VARCHAR(191) NULL;
