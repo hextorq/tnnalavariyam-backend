@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken')
 const path = require('path')
 const { z } = require('zod')
 const prisma = require('../config/prisma')
-const { frontendOrigin, jwtSecret, uploadDir } = require('../config/env')
+const { jwtSecret, uploadDir } = require('../config/env')
 const { sendPasswordResetMail } = require('../services/mail.service')
 const {
   assertCanApproveSignup,
@@ -139,8 +139,7 @@ function passwordHashDigest(passwordHash) {
 }
 
 function passwordResetUrl(token) {
-  const origin = (frontendOrigin || 'https://tnnalavariyam-frontend.vercel.app').replace(/\/+$/, '')
-  return `${origin}/password-reset?token=${encodeURIComponent(token)}`
+  return `https://tnnalavariyam.com/password-reset?token=${encodeURIComponent(token)}`
 }
 
 async function attachRejectedSignupHistory(requests, visibleWhere) {
