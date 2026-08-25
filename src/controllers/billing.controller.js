@@ -12,6 +12,20 @@ const createBillSchema = z.object({
   items: z.array(billItemSchema).min(1, 'At least one bill entry is required'),
 })
 
+function mergeUserSignupDetails(user, signupRequest) {
+  if (!user) return user
+  return {
+    ...user,
+    fullName: signupRequest?.fullName || user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username,
+    addressLine: signupRequest?.addressLine || '',
+    pincode: signupRequest?.pincode || '',
+    state: signupRequest?.state || 'Tamil Nadu',
+    district: signupRequest?.district || '',
+    taluk: signupRequest?.taluk || '',
+    village: signupRequest?.village || '',
+  }
+}
+
 async function generateBillNo() {
   const last = await prisma.bill.findFirst({
     orderBy: { id: 'desc' },
@@ -105,12 +119,65 @@ async function listBills(req, res, next) {
       },
     })
 
+    const users = bills.map((bill) => bill.user).filter(Boolean)
+    const userIds = [...new Set(users.map((billUser) => billUser.id).filter(Boolean))]
+    const usernames = [...new Set(users.map((billUser) => billUser.username).filter(Boolean))]
+    const emails = [...new Set(users.map((billUser) => billUser.email).filter(Boolean))]
+    const phones = [...new Set(users.map((billUser) => billUser.phone).filter(Boolean))]
+    const signupWhere = [
+      userIds.length ? { approvedUserId: { in: userIds } } : null,
+      usernames.length ? { username: { in: usernames } } : null,
+      emails.length ? { email: { in: emails } } : null,
+      phones.length ? { phone: { in: phones } } : null,
+    ].filter(Boolean)
+
+    let enrichedBills = bills
+    if (signupWhere.length) {
+      const signupRequests = await prisma.userSignupRequest.findMany({
+        where: { OR: signupWhere },
+        select: {
+          approvedUserId: true,
+          username: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          addressLine: true,
+          state: true,
+          district: true,
+          taluk: true,
+          village: true,
+          pincode: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+      })
+      const byApprovedUserId = new Map()
+      const byUsername = new Map()
+      const byEmail = new Map()
+      const byPhone = new Map()
+      for (const request of signupRequests) {
+        if (request.approvedUserId && !byApprovedUserId.has(request.approvedUserId)) byApprovedUserId.set(request.approvedUserId, request)
+        if (request.username && !byUsername.has(request.username)) byUsername.set(request.username, request)
+        if (request.email && !byEmail.has(request.email)) byEmail.set(request.email, request)
+        if (request.phone && !byPhone.has(request.phone)) byPhone.set(request.phone, request)
+      }
+
+      enrichedBills = bills.map((bill) => {
+        const billUser = bill.user
+        const signupRequest =
+          byApprovedUserId.get(billUser?.id) ||
+          byUsername.get(billUser?.username) ||
+          byEmail.get(billUser?.email) ||
+          byPhone.get(billUser?.phone)
+        return { ...bill, user: mergeUserSignupDetails(billUser, signupRequest) }
+      })
+    }
+
     const geoUnits = await prisma.geoUnit.findMany({
       select: { id: true, name: true, tamilName: true, englishName: true, type: true, parentId: true, path: true },
       orderBy: [{ type: 'asc' }, { name: 'asc' }],
     })
 
-    res.json({ bills, geoUnits })
+    res.json({ bills: enrichedBills, geoUnits })
   } catch (error) {
     next(error)
   }
