@@ -11,7 +11,8 @@
     "prisma:studio": "prisma studio",
     "seed:hierarchy": "node src/scripts/seedTamilNaduHierarchy.js",
     "seed:super-admin": "node src/scripts/seedSuperAdmin.js",
-    "clear:applications": "node src/scripts/clearApplicationData.js"
+    "clear:applications": "node src/scripts/clearApplicationData.js",
+    "reset:fresh": "node src/scripts/resetFreshProduct.js"
   },
   "keywords": [],
   "author": "",
