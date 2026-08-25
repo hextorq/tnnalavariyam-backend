@@ -48,6 +48,47 @@ function assertNoLargeInlineImages(applicantData) {
   }
 }
 
+function normalizeGeoText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+function getDistrictFromScope(scope) {
+  let current = scope
+  while (current) {
+    if (current.type === 'DISTRICT') return current
+    current = current.parent
+  }
+  return null
+}
+
+function districtValueMatches(district, value) {
+  const target = normalizeGeoText(value)
+  if (!target) return false
+  return [district?.name, district?.tamilName, district?.englishName]
+    .filter(Boolean)
+    .some((candidate) => normalizeGeoText(candidate) === target)
+}
+
+async function assertApplicationDistrictScope(user, applicantData) {
+  if (['SUPER_ADMIN', 'STATE_ADMIN'].includes(user.role)) return null
+  if (!user.scopeId) {
+    return 'Your account is not linked to a district scope. Contact admin.'
+  }
+
+  const scope = await prisma.geoUnit.findUnique({ where: { id: user.scopeId }, include: geoHierarchyInclude })
+  const district = getDistrictFromScope(scope)
+  if (!district) {
+    return 'Your assigned district could not be found. Contact admin.'
+  }
+  if (!districtValueMatches(district, applicantData?.district)) {
+    return 'You can submit applications only for your assigned district.'
+  }
+  return null
+}
+
 const applicationImageSchema = z.object({
   field: z.string().min(1),
   path: z.string().min(1),
@@ -196,6 +237,8 @@ async function createSubmission(req, res, next) {
     const form = await ensureFormExists(data.formKey)
     if (!form || !form.isActive) return res.status(400).json({ message: 'Application form not found or inactive' })
     assertNoLargeInlineImages(data.applicantData)
+    const scopeError = await assertApplicationDistrictScope(req.user, data.applicantData)
+    if (scopeError) return res.status(403).json({ message: scopeError })
 
     const applicationNo = `TNW-${Date.now()}-${req.user.id}`
     const paymentAmount = form.feeAmount ? Number(form.feeAmount) : null
