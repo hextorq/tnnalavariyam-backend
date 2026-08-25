@@ -3,10 +3,12 @@ const {
   changePassword,
   checkSignupAvailability,
   deleteSignupTemp,
+  forgotPassword,
   getMe,
   listSignupRequests,
   login,
   requestSignup,
+  resetPassword,
   reviewSignupRequest,
   trackSignupRequest,
   updateProfile,
@@ -26,6 +28,8 @@ router.post('/uploads/signup-temp', uploadSignupTempFile, uploadSignupTemp)
 router.delete('/uploads/signup-temp', deleteSignupTemp)
 router.post('/register', uploadSignupFiles, requestSignup)
 router.post('/login', login)
+router.post('/forgot-password', forgotPassword)
+router.post('/reset-password', resetPassword)
 router.get('/signup-requests', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN'), listSignupRequests)
 router.patch('/signup-requests/:id/review', authenticate, requireRole('SUPER_ADMIN', 'STATE_ADMIN', 'DISTRICT_ADMIN', 'TALUK_ADMIN', 'VILLAGE_ADMIN'), reviewSignupRequest)
 router.get('/signup-requests/track', trackSignupRequest)

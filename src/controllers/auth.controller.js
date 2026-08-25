@@ -1,10 +1,12 @@
 const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
 const fs = require('fs/promises')
 const jwt = require('jsonwebtoken')
 const path = require('path')
 const { z } = require('zod')
 const prisma = require('../config/prisma')
-const { jwtSecret, uploadDir } = require('../config/env')
+const { frontendOrigin, jwtSecret, uploadDir } = require('../config/env')
+const { sendPasswordResetMail } = require('../services/mail.service')
 const {
   assertCanApproveSignup,
   getVisibleSignupWhere,
@@ -56,6 +58,19 @@ const signupRequestSchema = z.object({
 const loginSchema = z.object({
   identifier: z.string().trim().min(1),
   password: z.string().min(1),
+})
+
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().email('Valid email is required'),
+})
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  confirmPassword: z.string().min(1, 'Confirm password is required'),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
 })
 
 const availabilitySchema = z.object({
@@ -117,6 +132,15 @@ function resolveSignupUploadPath(publicPath) {
 
 function getCredentialMatches(source, target) {
   return ['username', 'email', 'phone'].filter((field) => source[field] && source[field] === target[field])
+}
+
+function passwordHashDigest(passwordHash) {
+  return crypto.createHash('sha256').update(passwordHash || '').digest('hex')
+}
+
+function passwordResetUrl(token) {
+  const origin = (frontendOrigin || 'https://tnnalavariyam-frontend.vercel.app').replace(/\/+$/, '')
+  return `${origin}/password-reset?token=${encodeURIComponent(token)}`
 }
 
 async function attachRejectedSignupHistory(requests, visibleWhere) {
@@ -745,14 +769,105 @@ async function login(req, res, next) {
   }
 }
 
+async function forgotPassword(req, res, next) {
+  try {
+    const data = forgotPasswordSchema.parse(req.body)
+    const email = data.email.toLowerCase()
+    const user = await prisma.user.findUnique({ where: { email } })
+
+    if (user?.isActive) {
+      const token = jwt.sign(
+        {
+          sub: user.id,
+          email: user.email,
+          purpose: 'PASSWORD_RESET',
+          pwd: passwordHashDigest(user.passwordHash),
+        },
+        jwtSecret,
+        { expiresIn: '30m' }
+      )
+
+      await sendPasswordResetMail({
+        email: user.email,
+        name: user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username,
+        resetUrl: passwordResetUrl(token),
+      })
+
+      try {
+        await prisma.auditLog.create({
+          data: {
+            userId: user.id,
+            action: 'PASSWORD_RESET_REQUESTED',
+            metadata: { email: user.email },
+          },
+        })
+      } catch {
+        // Audit log fallback
+      }
+    }
+
+    res.json({
+      message:
+        'If this email is registered, a password reset link has been sent. / இந்த மின்னஞ்சல் பதிவு செய்யப்பட்டிருந்தால், கடவுச்சொல் மீட்டமைப்பு இணைப்பு அனுப்பப்படும்.',
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function resetPassword(req, res, next) {
+  try {
+    const data = resetPasswordSchema.parse(req.body)
+    let payload
+    try {
+      payload = jwt.verify(data.token, jwtSecret)
+    } catch {
+      return res.status(400).json({ message: 'Password reset link is invalid or expired' })
+    }
+
+    if (payload?.purpose !== 'PASSWORD_RESET' || !payload?.sub) {
+      return res.status(400).json({ message: 'Password reset link is invalid or expired' })
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: Number(payload.sub) } })
+    if (!user || !user.isActive || user.email !== payload.email || passwordHashDigest(user.passwordHash) !== payload.pwd) {
+      return res.status(400).json({ message: 'Password reset link is invalid or expired' })
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, 10)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    })
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'PASSWORD_RESET_COMPLETED',
+          metadata: { email: user.email },
+        },
+      })
+    } catch {
+      // Audit log fallback
+    }
+
+    res.json({ message: 'Password reset successfully. Please login with your new password.' })
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
   changePassword,
   checkSignupAvailability,
   deleteSignupTemp,
+  forgotPassword,
   getMe,
   listSignupRequests,
   login,
   requestSignup,
+  resetPassword,
   reviewSignupRequest,
   trackSignupRequest,
   updateProfile,
