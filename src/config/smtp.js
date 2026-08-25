@@ -1,4 +1,4 @@
-const smtpConfig = {
+const defaultSmtpConfig = {
   host: 'smtp.gmail.com',
   port: 465,
   secure: true,
@@ -7,6 +7,25 @@ const smtpConfig = {
     pass: 'CHANGE_ME_GMAIL_APP_PASSWORD',
   },
   fromName: 'TN Nalavariyam',
+}
+
+function loadLocalSmtpConfig() {
+  try {
+    return require('./smtp.local')
+  } catch (error) {
+    if (error.code === 'MODULE_NOT_FOUND') return {}
+    throw error
+  }
+}
+
+const localSmtpConfig = loadLocalSmtpConfig()
+const smtpConfig = {
+  ...defaultSmtpConfig,
+  ...localSmtpConfig,
+  auth: {
+    ...defaultSmtpConfig.auth,
+    ...(localSmtpConfig.auth || {}),
+  },
 }
 
 function isSmtpConfigured() {
