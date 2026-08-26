@@ -576,14 +576,16 @@ async function resolveUserGeoHierarchy(userId) {
 
   if (!user) return null
 
-  const signupReq = await prisma.userSignupRequest.findFirst({
+  const signupRequestLookup = [
+    { approvedUserId: user.id },
+    user.username ? { username: user.username } : null,
+    user.email ? { email: user.email } : null,
+    user.phone ? { phone: user.phone } : null,
+  ].filter(Boolean)
+
+  const signupReq = signupRequestLookup.length ? await prisma.userSignupRequest.findFirst({
     where: {
-      OR: [
-        { approvedUserId: user.id },
-        { username: user.username },
-        { email: user.email },
-        { phone: user.phone },
-      ],
+      OR: signupRequestLookup,
     },
     select: {
       photoPath: true,
@@ -595,7 +597,7 @@ async function resolveUserGeoHierarchy(userId) {
       taluk: true,
       village: true,
     },
-  })
+  }) : null
 
   let state = signupReq?.state || 'Tamil Nadu'
   let district = signupReq?.district || ''
